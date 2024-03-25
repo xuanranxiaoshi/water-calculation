@@ -1,3 +1,5 @@
+#include <algorithm>
+#include <iterator>
 #include <vector>
 #include <cmath>
 
@@ -18,6 +20,7 @@ using Vec3 = vector<vector<vector<double>>>;
 // scalar
 double HM1, HM2;
 double BI;
+double DT;
 
 // no-state matrix
 Vec WH;
@@ -26,6 +29,10 @@ Vec WV;
 Vec ZB1;
 Vec ZBC;
 Vec QL;
+Vec MBQ;
+Vec NV;
+Vec AREA;
+Vec FNC;
 
 // one-dimention time-wise matrix
 Vec2 H;
@@ -143,20 +150,47 @@ void calculate_WHUV(int t, int pos) {
 }
 
 void calculate_HUV(int t, int pos) {
+  double SIDEX, SIDES, HSIDE, DT2, DTA, WDTA;
+  double QX1, QY1, DTAU, DTAV, FNCC, WSF;
+
+  if (NV[pos] == 4) {
+      SIDEX = std::min(0.5 * (SIDE[0][pos] + SIDE[2][pos]), 0.5 * (SIDE[1][pos] + SIDE[3][pos]));
+  } else {
+      SIDES = 0.5 * (SIDE[0][pos] + SIDE[1][pos] + SIDE[2][pos]);
+      SIDEX = std::sqrt((SIDES - SIDE[0][pos]) * (SIDES - SIDE[1][pos]) * (SIDES - SIDE[2][pos]) / SIDES);
+  }
+  HSIDE = std::max(H[TIME_PREV][pos], HM1);
+  DT2 = SIDEX / (U[TIME_PREV][pos] + std::sqrt(9.81 * HSIDE));
+  DT2 = std::min(DT, DT2);
+  DT2 = std::max(DT2, DT / 10.0);
+  DTA = 1.0 * DT2 / (1.0 * AREA[pos]);
+  WDTA = 1.00 * DTA;
+
   H[TIME_NOW][pos] = std::max(H[TIME_PREV][pos] - WDTA * WH[i] + QLUA, HM1);
   Z[TIME_NOW][pos] = H[TIME_NOW][pos] + ZBC[TIME_NOW][pos];
-  if (H[TIME_NOW][pos] <= HM1) {
-    U[TIME_NOW][pos] = 0;
-    V[TIME_NOW][pos] = 0;
-  } else {
-    if (H[TIME_NOW][i] <= HM2) {
-      U[TIME_NOW][pos] = std::copysign(std::min(VMIN, std::abs(U[TIME_PREV][pos])), U[TIME_PREV][pos]);
-      V[TIME_NOW][pos] = std::copysign(std::min(VMIN, std::abs(V[TIME_PREV][pos])), V[TIME_PREV][pos]);
+    if (H[TIME_NOW][pos] <= HM1) {
+        U[TIME_NOW][pos] = 0.0;
+        V[TIME_NOW][pos] = 0.0;
     } else {
-      U[TIME_NOW][pos] = (QX1 - DTAU - DT * WSF * U[TIME_PREV][pos]) / H[TIME_NOW][pos];
-      V[TIME_NOW][pos] = (QY1 - DTAV - DT * WSF * V[TIME_PREV][pos]) / H[TIME_NOW][pos];      
+        if (H[TIME_NOW][pos] <= HM2) {
+            U[TIME_NOW][pos] = std::copysign(std::min(VMIN, std::abs(U[TIME_PREV][pos])), U[TIME_PREV][pos]);
+            V[TIME_NOW][pos] = std::copysign(std::min(VMIN, std::abs(V[TIME_PREV][pos])), V[TIME_PREV][pos]);
+        } else {
+            QX1 = H[TIME_PREV][pos] * U[TIME_PREV][pos];
+            QY1 = H[TIME_PREV][pos] * V[TIME_PREV][pos];
+            DTAU = WDTA * WU[pos];
+            DTAV = WDTA * WV[pos];
+            
+            FNCC = FNC[pos];
+            WSF = FNCC * std::sqrt(U[TIME_PREV][pos] * U[TIME_PREV][pos] + V[TIME_PREV][pos] * V[TIME_PREV][pos]) / std::pow(H[TIME_PREV][pos], 0.33333);
+            
+            U[TIME_NOW][pos] = (QX1 - DTAU - DT * WSF * U[TIME_PREV][pos]) / H[TIME_NOW][pos];
+            V[TIME_NOW][pos] = (QY1 - DTAV - DT * WSF * V[TIME_PREV][pos]) / H[TIME_NOW][pos];
+            
+            U[TIME_NOW][pos] = std::copysign(std::min(std::abs(U[TIME_NOW][pos]), 5.0), U[TIME_NOW][pos]);
+            V[TIME_NOW][pos] = std::copysign(std::min(std::abs(V[TIME_NOW][pos]), 5.0), V[TIME_NOW][pos]);
+        }
     }
-  }
   W[TIME_NOW][pos] = sqrt(U[TIME_NOW][pos] * U[TIME_NOW][pos] + V[TIME_NOW][pos] * V[TIME_NOW][pos]);
 }
 
@@ -174,7 +208,11 @@ void BOUNDA(int t, int j, int pos) {
 
   switch (KP) {
     case 10:
-    
+      int II;
+      auto it = std::find(MBQ.begin(), MBQ.end(), pos);
+      II = std::distance(MBQ.begin(), it);
+      FLR(0) = ;
+
     break;
 
     case 3:
