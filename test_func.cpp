@@ -41,6 +41,7 @@ Vec WV;
 Vec ZB1;
 Vec ZBC;
 Vec QL;
+Vec QR;
 Vec MBQ;
 Vec MBZ;
 Vec MBW;
@@ -57,6 +58,7 @@ Vec TOPD;
 // Origin scalar, but change to Matrix
 Vec CL;
 Vec FIL;
+Vec FIR;
 Vec ZC;
 Vec HC;
 Vec UC;
@@ -96,6 +98,9 @@ void OSHER(int t, int pos);
 void CHOICE(Vec list, double target, int &index);
 void LAQP(double X, double& Y, Vec A, Vec B, double MS);
 double QD(double ZL, double ZR, double ZB);
+void QS(int k, int j, int pos);
+void QF(double H, double U, double V, Vec &F);
+void data_input_and_initialize();
 
 void calculate_FLUX(int t, int pos) {
   for (int j = 0; j < 4; j++){
@@ -395,7 +400,247 @@ void BOUNDA(int t, int j, int pos) {
 
 
 void OSHER(int t, int pos){
+  double CR = sqrt(9.81 * QR[0]);
+  FIR[pos] = QR[1] - 2 * CR;
+  double UA = (FIL[pos] + FIR[pos]) / 2;
+  double CA = fabs((FIL[pos] - FIR[pos]) / 4);
 
+  int K1, K2;
+  if (QL[1] < CL[pos] && QR[1] >= -CR) {
+      K1 = 1;
+  } else {
+      if (CA < UA) {
+          K2 = 10;
+      }
+      if (UA >= 0.0 && UA < CA) {
+          K2 = 20;
+      }
+      if (UA >= -CA && UA < 0.0) {
+          K2 = 30;
+      }
+      if (UA < -CA) {
+          K2 = 40;
+      }
+  }
+
+  if (QL[1]  >= CL[pos] && QR[1] >= -CR) {
+      K1 = 2;
+  } else {
+      if (CA < UA) {
+          K2 = 10;
+      }
+      if (UA >= 0.0 && UA < CA) {
+          K2 = 20;
+      }
+      if (UA >= -CA && UA < 0.0) {
+          K2 = 30;
+      }
+      if (UA < -CA) {
+          K2 = 40;
+      }
+  }
+
+  if (QL[1]  < CL[pos] && QR[1] < -CR) {
+      K1 = 3;
+  } else {
+      if (CA < UA) {
+          K2 = 10;
+      }
+      if (UA >= 0.0 && UA < CA) {
+          K2 = 20;
+      }
+      if (UA >= -CA && UA < 0.0) {
+          K2 = 30;
+      }
+      if (UA < -CA) {
+          K2 = 40;
+      }
+  }
+
+  if (QL[1]  >= CL[pos] && QR[1] < -CR) {
+      K1 = 4;
+  } else {
+      if (CA < UA) {
+          K2 = 10;
+      }
+      if (UA >= 0.0 && UA < CA) {
+          K2 = 20;
+      }
+      if (UA >= -CA && UA < 0.0) {
+          K2 = 30;
+      }
+      if (UA < -CA) {
+          K2 = 40;
+      }
+  }
+
+  int K12 = K1 + K2;
+
+  if (K12 == 11) {
+      QS(2, 1, pos);
+      return;
+  }
+
+  if (K12 == 21) {
+      QS(3, 1, pos);
+      return;
+  }
+
+  if (K12 == 31) {
+      QS(5, 1, pos);
+      return;
+  }
+
+  if (K12 == 41) {
+      QS(6, 1, pos);
+      return;
+  }
+
+  if (K12 == 12) {
+      QS(1, 1, pos);
+      return;
+  }
+
+  if (K12 == 22) {
+      QS(1, 1, pos);
+      QS(2, -1, pos);
+      QS(3, 1, pos);
+      return;
+  }
+
+  if (K12 == 32) {
+      QS(1, 1, pos);
+      QS(2, -1, pos);
+      QS(5, 1, pos);
+      return;
+  }
+
+  if (K12 == 42) {
+      QS(1, 1, pos);
+      QS(2, -1, pos);
+      QS(6, 1, pos);
+      return;
+  }
+
+  if (K12 == 13) {
+      QS(2, 1, pos);
+      QS(6, -1, pos);
+      QS(7, 1, pos);
+      return;
+  }
+
+  if (K12 == 23) {
+      QS(3, 1, pos);
+      QS(6, -1, pos);
+      QS(7, 1, pos);
+      return;
+  }
+
+  if (K12 == 33) {
+      QS(5, 1, pos);
+      QS(6, -1, pos);
+      QS(7, 1, pos);
+      return;
+  }
+
+  if (K12 == 43) {
+      QS(7, 1, pos);
+      return;
+  }
+
+  if (K12 == 14) {
+      QS(1, 1, pos);
+      QS(6, -1, pos);
+      QS(7, 1, pos);
+      return;
+  }
+
+  if (K12 == 24) {
+      QS(1, 1, pos);
+      QS(2, -1, pos);
+      QS(3, 1, pos);
+      QS(6, -1, pos);
+      QS(7, 1, pos);
+      return;
+  }
+
+  if (K12 == 34) {
+      QS(1, 1, pos);
+      QS(2, -1, pos);
+      QS(5, 1, pos);
+      QS(6, -1, pos);
+      QS(7, 1, pos);
+      return;
+  }
+
+  if (K12 == 44) {
+      QS(1, 1, pos);
+      QS(2, -1, pos);
+      QS(7, 1, pos);
+  }
+}
+
+void QS(int k, int j, int pos) {
+    // COMPUTATION OF FLUX BASED ON LEFT, RIGHT OR INTERMEDIATE STATE     
+    Vec F;
+
+    if (k == 1) {
+        QF(QL[0], QL[1] , QL[2], F);
+        for (int i = 0; i < 4; i++) {
+            FLR(i) += F[i] * j;
+        }
+    }
+
+    if (k == 2) {
+        double US = FIL[pos] / 3;
+        double HS = US * US / 9.81;
+        QF(HS, US, QL[2], F);
+        for (int i = 0; i < 4; i++) {
+            FLR(i) += F[i] * j;
+        }
+    }
+
+    if (k == 3) {
+        FIL[pos]  = FIL[pos] - (FIL[pos] + FIR[pos]) / 2;
+        double HA = FIL[pos]  * FIL[pos]  / 39.24;
+        QF(HA, (FIL[pos] + FIR[pos]) / 2, QL[2], F);
+        for (int i = 0; i < 4; i++) {
+            FLR(i) += F[i] * j;
+        }
+    }
+
+    if (k == 5) {
+        FIR[pos]  = FIR[pos]  - (FIL[pos] + FIR[pos]) / 2;
+        double HA = FIR[pos]  * FIR[pos]  / 39.24;
+        QF(HA, (FIL[pos] + FIR[pos]) / 2, QR[2], F);
+        for (int i = 0; i < 4; i++) {
+            FLR(i) += F[i] * j;
+        }
+    }
+
+    if (k == 6) {
+        double US = FIR[pos] / 3;
+        double HS = US * US / 9.81;
+        QF(HS, US, QR[2], F);
+        for (int i = 0; i < 4; i++) {
+            FLR(i) += F[i] * j;
+        }
+    }
+
+    if (k == 7) {
+        QF(QR[0], QR[1], QR[2], F);
+        for (int i = 0; i < 4; i++) {
+            FLR(i) += F[i] * j;
+        }
+    }
+}
+
+void QF(double H, double U, double V, Vec &F) {
+    // COMPUTATION OF FLUX COMPONENTS
+    F[0] = H * U;
+    F[1] = F[0] * U;
+    F[2] = F[0] * V;
+    F[3] = 4.905 * H * H;
 }
 
 void CHOICE(Vec list, double target, int &index){
@@ -490,6 +735,7 @@ void time_step(int t, int pos){
 }
 
 int main() {
+  data_input_and_initialize();
   // 必须串行执行的部分：
   // K0 = 2000
   for(jt = 0; jt < 365; jt ++){
