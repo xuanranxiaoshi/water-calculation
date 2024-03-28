@@ -3,7 +3,6 @@
 #include <iterator>
 #include <vector>
 #include <cmath>
-#include <iostream>
 
 #define TIME_NOW (t%2)
 #define TIME_PREV ((t-1)%2)
@@ -20,7 +19,10 @@ using Vec3 = vector<vector<vector<double>>>;
 
 // TIME -> Y -> X
 // const value
+const double C0 = 1.33;
 const double C1 = 1.7;
+const double VMIN = 0.001;
+const double QLUA = 0.0;
 
 // Time scalar
 int jt;
@@ -40,15 +42,26 @@ Vec ZB1;
 Vec ZBC;
 Vec QL;
 Vec MBQ;
+Vec MBZ;
+Vec MBW;
+Vec MDI;
 Vec NV;
 Vec AREA;
 Vec FNC;
 Vec DQT;
 Vec MBZQ;
+Vec DZT;
+Vec TOPW;
+Vec TOPD;
 
 // Origin scalar, but change to Matrix
 Vec CL;
 Vec FIL;
+Vec ZC;
+Vec HC;
+Vec UC;
+Vec BC;
+Vec VC;
 
 // one-dimention time-wise matrix
 Vec2 H;
@@ -60,7 +73,11 @@ Vec2 NAC;
 Vec2 W;
 Vec2 QT;
 Vec2 ZW;
+Vec2 ZT;
 Vec2 QW;
+
+Vec2 COSF;
+Vec2 SINF;
 
 // one-dimention j-wise matrix
 Vec2 SIDE;
@@ -78,6 +95,7 @@ void BOUNDA(int t, int j, int pos);
 void OSHER(int t, int pos);
 void CHOICE(Vec list, double target, int &index);
 void LAQP(double X, double& Y, Vec A, Vec B, double MS);
+double QD(double ZL, double ZR, double ZB);
 
 void calculate_FLUX(int t, int pos) {
   for (int j = 0; j < 4; j++){
@@ -85,63 +103,61 @@ void calculate_FLUX(int t, int pos) {
     double KP = KLAS[j][pos];
     double NC = NAC[j][pos];
     double ZI = fmax(Z[TIME_PREV][pos], ZB1[pos]);
-    int HC, BC, ZC, UC, VC;
     if (NC == 0) {
-      HC = 0;
-      BC = 0;
-      ZC = 0;
-      UC = 0;
-      VC = 0;
+      HC[pos] = 0;
+      BC[pos] = 0;
+      ZC[pos] = 0;
+      UC[pos] = 0;
+      VC[pos] = 0;
     } else {
-      HC = std::fmax(H[TIME_PREV][HM1], HM1); 
-      BC = ZBC[NC];
-      ZC = std::fmax(ZBC[NC], Z[TIME_PREV][NC]);
-      UC = U[TIME_PREV][NC];
-      VC = V[TIME_PREV][NC];
+      HC[pos] = std::fmax(H[TIME_PREV][HM1], HM1); 
+      BC[pos] = ZBC[NC];
+      ZC[pos] = std::fmax(ZBC[NC], Z[TIME_PREV][NC]);
+      UC[pos] = U[TIME_PREV][NC];
+      VC[pos] = V[TIME_PREV][NC];
     }
 
     if(KP >= 1 && KP <= 8 || KP >= 10) {
       BOUNDA(t, j, pos);
-    } else if (H[TIME_PREV][pos] <= HM1 && HC <= HM1) {
+    } else if (H[TIME_PREV][pos] <= HM1 && HC[pos] <= HM1) {
       FLUX_VAL(0, 0, 0, 0);
-    } else if (ZI <= BC) {
-      // BUG: C1 undefined.
-      FLUX_VAL(-C1 * pow(HC, 1.5),
+    } else if (ZI <= BC[pos]) {
+      FLUX_VAL(-C1 * pow(HC[pos], 1.5),
                H[TIME_PREV][pos] * QL[1] * fabs(QL[1]),
                0,
                4.905 * H[TIME_PREV][pos] * H[TIME_PREV][pos]);
 
-    } else if (ZC <= BI) {
+    } else if (ZC[pos] <= BI) {
       FLUX_VAL(C1 * pow(H[TIME_PREV][pos], 1.5),
                FLR(0) * QL[1],
                FLR(0) * QL[2],
                0);
 
     } else if (H[TIME_PREV][pos] <= HM2) {
-      if (ZC > ZI) {
-        double DH = fmax(ZC - BI, HM1);
+      if (ZC[pos] > ZI) {
+        double DH = fmax(ZC[pos] - BI, HM1);
         double UN = -C1 * std::sqrt(DH);
         FLUX_VAL(DH * UN,
                  FLR(0) * UN,
-                 FLR(0) * (VC * COSA - UC * SINA),
+                 FLR(0) * (VC[pos] * COSF[j][pos] - UC[pos] * SINF[j][pos]),
                  4.905 *  H[TIME_PREV][pos] * H[TIME_PREV][pos]);
       } else {
-        FLUX_VAL(-C1 * pow(HC, 1.5),
+        FLUX_VAL(-C1 * pow(HC[pos], 1.5),
                  0, 
                  0, 
                  4.905 *  H[TIME_PREV][pos] * H[TIME_PREV][pos]);
       }
-    } else if (HC <= HM2) {
-      if (ZI > ZC) {
-        double DH = fmax(ZC - BI, HM1);
+    } else if (HC[pos] <= HM2) {
+      if (ZI > ZC[pos]) {
+        double DH = fmax(ZC[pos] - BI, HM1);
         double UN = -C1 * std::sqrt(DH);
-        double HC1 = ZC - BI;
+        double HC1 = ZC[pos] - BI;
         FLUX_VAL(DH * UN,
                  FLR(0) * UN,
                  FLR(0) * QL[2],
                  4.905 * HC1 * HC1);
       } else {
-        FLUX_VAL(-HC * C1 * sqrt(HC),
+        FLUX_VAL(-HC[pos] * C1 * sqrt(HC[pos]),
                  H[TIME_PREV][pos] * QL[1] * QL[1],
                  0,
                  4.905 *  H[TIME_PREV][pos] * H[TIME_PREV][pos]);
@@ -186,8 +202,8 @@ void calculate_HUV(int t, int pos) {
   DTA = 1.0 * DT2 / (1.0 * AREA[pos]);
   WDTA = 1.00 * DTA;
 
-  H[TIME_NOW][pos] = std::max(H[TIME_PREV][pos] - WDTA * WH[i] + QLUA, HM1);
-  Z[TIME_NOW][pos] = H[TIME_NOW][pos] + ZBC[TIME_NOW][pos];
+  H[TIME_NOW][pos] = std::max(H[TIME_PREV][pos] - WDTA * WH[pos] + QLUA, HM1);
+  Z[TIME_NOW][pos] = H[TIME_NOW][pos] + ZBC[pos];
     if (H[TIME_NOW][pos] <= HM1) {
         U[TIME_NOW][pos] = 0.0;
         V[TIME_NOW][pos] = 0.0;
@@ -234,31 +250,28 @@ void BOUNDA(int t, int j, int pos) {
 
   int II;
   double HB;
-  switch (KP) {
-    case 10:
-      CHOICE(MBQ, pos, II);
-      FLR(0) = -(QT[jt][II] + DQT[II] * t);
-      FLR(0) = FLR(0) / SIDE[j][pos];
-      double QB2 = FLR(0) * FLR(0);
-      double HB0 = H[TIME_PREV][pos];
+  if (KP == 10) {
+    CHOICE(MBQ, pos, II);
+    FLR(0) = -(QT[jt][II] + DQT[II] * t);
+    FLR(0) = FLR(0) / SIDE[j][pos];
+    double QB2 = FLR(0) * FLR(0);
+    double HB0 = H[TIME_PREV][pos];
 
-      for (int K = 1; K <= 20; K++) {
-          double W_temp = FIL[pos] - FLR(0) / HB0;
-          HB = W_temp * W_temp / 39.24;
-          if (std::abs(HB0 - HB) <= 0.005)
-              break;
-          HB0 = HB0 * 0.5 + HB * 0.5;
-      }
-      if (HB <= 1) {
-          FLR(1) = 0;
-      } else {
-          FLR(1) = QB2 / HB;
-      }
-      FLR(2) = 0;
-      FLR(3) = 4.905 * HB * HB;
-      break;
-
-    case 3:
+    for (int K = 1; K <= 20; K++) {
+        double W_temp = FIL[pos] - FLR(0) / HB0;
+        HB = W_temp * W_temp / 39.24;
+        if (std::abs(HB0 - HB) <= 0.005)
+            break;
+        HB0 = HB0 * 0.5 + HB * 0.5;
+    }
+    if (HB <= 1) {
+        FLR(1) = 0;
+    } else {
+        FLR(1) = QB2 / HB;
+    }
+    FLR(2) = 0;
+    FLR(3) = 4.905 * HB * HB;
+  } else if (KP == 3) {
       double CQ;
       double HR;
       double W;
@@ -281,12 +294,10 @@ void BOUNDA(int t, int j, int pos) {
       FLR(1) = CQ * CQ / HR;
       HB = (H[TIME_PREV][pos] + HR) / 2;
       FLR(3) = 4.905 * HB * HB;
-    break;
-
-    case 1:
-    choice(NZ, MBZ, I, II);
-    double HB1 = ZT[JT][II] + DZT[II] * KT - BI;
-    double FIAL = QL[2] + 6.264 * sqrt(HI);
+  } else if (KP == 1) {
+        CHOICE(MBZ, pos, II);
+    double HB1 = ZT[jt][II] + DZT[II] * t - BI;
+    double FIAL = QL[2] + 6.264 * sqrt(H[TIME_PREV][pos]);
     double UR0 = QL[2];
     double URB = UR0;
     for (int IURB = 1; IURB <= 30; IURB++) {
@@ -296,101 +307,92 @@ void BOUNDA(int t, int j, int pos) {
             break;
         UR0 = URB;
     }
-    FLR[0] = HB1 * URB;
-    FLR[1] = FLR[0] * URB;
-    FLR[3] = 4.905 * HB1 * HB1;
-    return;
-    break;
-    
-    case 4:
-    FLR[0] = 0;
-FLR[1] = 0;
-FLR[2] = 0;
-FLR[3] = 4.905 * HI * HI;
-    break;
-
-    case 5:
-    QL[1] = std::max(QL[1], 0.0);
-FLR[0] = HI * QL[1];
-FLR[1] = FLR[0] * QL[1];
-FLR[3] = 4.905 * HI * HI;
-    break;
-
-    case 6:
-    if (KP == 6) {
-    NE = I;
+    FLR(0) = HB1 * URB;
+    FLR(1) = FLR(0) * URB;
+    FLR(3) = 4.905 * HB1 * HB1;
+  } else if (KP == 4){
+    FLR(0) = 0;
+    FLR(1) = 0;
+    FLR(2) = 0;
+    FLR(3) = 4.905 * H[TIME_PREV][pos] * H[TIME_PREV][pos];
+  } else if (KP == 5) {
+        QL[1] = std::max(QL[1], 0.0);
+    FLR(0) = H[TIME_PREV][pos] * QL[1];
+    FLR(1) = FLR(0) * QL[1];
+    FLR(3) = 4.905 * H[TIME_PREV][pos] * H[TIME_PREV][pos];
+  } else if (KP == 6) {
+        double NC = NAC[j][pos];
+    double NE;
     if (NC != 0) {
-        NE = std::min(I, NC);
+        NE = std::fmin(pos, NC);
     }
-    CHOICE(NWE, MBW, NE, I1);
-    TOP = TOPW(I1);
-    if (ZI < TOP || ZC < TOP) {
+    CHOICE(MBW, NE, II);
+    double TOP = TOPW[II];
+    if (Z[TIME_PREV][pos] < TOP || ZC[pos] < TOP) {
         KP = 4;
-        FLR[0] = 0;
-        FLR[1] = 0;
-        FLR[2] = 0;
-        FLR[3] = 4.905 * HI * HI;
+        FLR(0) = 0;
+        FLR(1) = 0;
+        FLR(2) = 0;
+        FLR(3) = 4.905 * H[TIME_PREV][pos] * H[TIME_PREV][pos];
     }
-    if (ZI > TOP && ZC < TOP) {
-        FLR[0] = C0 * std::pow(ZI - TOP, 1.5);
-        FLR[1] = FLR[0] * QL[1];
-        FLR[2] = FLR[0] * QL[2];
-        FLR[3] = 4.905 * std::pow(TOP - BI, 2);
+    if (Z[TIME_PREV][pos] > TOP && ZC[pos] < TOP) {
+        FLR(0) = C0 * std::pow(Z[TIME_PREV][pos] - TOP, 1.5);
+        FLR(1) = FLR(0) * QL[1];
+        FLR(2) = FLR(0) * QL[2];
+        FLR(3) = 4.905 * std::pow(TOP - BI, 2);
         return;
     }
-    if (ZI < TOP && ZC > TOP) {
-        FLR[0] = -C0 * std::pow(ZC - TOP, 1.5);
-        FLR[1] = FLR[0] * std::min(UC * COSA + VC * SINA, 0.0);
-        FLR[2] = FLR[0] * (VC * COSA - UC * SINA);
-        FLR[3] = 4.905 * std::pow(ZI - BI, 2);
+    if (Z[TIME_PREV][pos] < TOP && ZC[pos] > TOP) {
+        FLR(0) = -C0 * std::pow(ZC[pos] - TOP, 1.5);
+        FLR(1) = FLR(0) * std::min(UC[pos] * COSF[j][pos] + VC[pos] * SINF[j][pos], 0.0);
+        FLR(2) = FLR(0) * (VC[pos] * COSF[j][pos] - UC[pos] * SINF[j][pos]);
+        FLR(3) = 4.905 * std::pow(Z[TIME_PREV][pos] - BI, 2);
         return;
     }
-    DZ = std::abs(ZI - ZC);
-    if (ZI <= ZC) {
-        HD = ZI - TOP;
-        UN = std::min(UC * COSA + VC * SINA, 0.0);
-        VT = VC * COSA - UC * SINA;
+    double DZ = std::abs(Z[TIME_PREV][pos] - ZC[pos]);
+    double HD;
+    double UN;
+    double VT;
+    if (Z[TIME_PREV][pos] <= ZC[pos]) {
+        HD = Z[TIME_PREV][pos] - TOP;
+        UN = std::min(UC[pos] * COSF[j][pos] + VC[pos] * SINF[j][pos], 0.0);
+        VT = VC[pos] * COSF[j][pos] - UC[pos] * SINF[j][pos];
     } else {
-        HD = ZC - TOP;
+        HD = ZC[pos] - TOP;
         UN = std::max(QL[1], 0.0);
         VT = QL[2];
     }
-    SH = HD + DZ;
-    CE = std::min(1.0, 1.05 * std::pow(DZ / SH, 0.33333));
-    if (ZI < ZC && UN > 0.0) {
+    double SH = HD + DZ;
+    double CE = std::min(1.0, 1.05 * std::pow(DZ / SH, 0.33333));
+    if (Z[TIME_PREV][pos] < ZC[pos] && UN > 0.0) {
         UN = 0.0;
     }
-    FLR[0] = std::copysign(CE * C1 * std::pow(SH, 1.5), ZI - ZC);
-    FLR[1] = FLR[0] * std::abs(UN);
-    FLR[2] = FLR[0] * VT;
-    FLR[3] = 4.905 * std::pow(TOP - BI, 2);
-    return;
-}
-    break;
-
-    case 7:
-        CHOICE(NDI, MDI, I, I1);
-    TOP = TOPD(I1);
-    if (ZI > TOP || ZC > TOP) {
+    FLR(0) = std::copysign(CE * C1 * std::pow(SH, 1.5), Z[TIME_PREV][pos] - ZC[pos]);
+    FLR(1) = FLR(0) * std::abs(UN);
+    FLR(2) = FLR(0) * VT;
+    FLR(3) = 4.905 * std::pow(TOP - BI, 2);
+  } else if (KP == 7) {
+    CHOICE(MDI, pos, II);
+    double TOP = TOPD[II];
+    if (Z[TIME_PREV][pos] > TOP || ZC[pos] > TOP) {
         KP = 0;
-        KLAS[J][I] = 0;
-        CQ = QD(ZI, ZC, TOP);
-        CB = BRDTH / SL;
-        FLR[0] = CQ * CB;
-        FLR[1] = CB * std::copysign(CQ * CQ / HB, CQ);
-        FLR[3] = 4.905 * HB * HB;
+        KLAS[j][pos] = 0;
+        double CQ = QD(Z[TIME_PREV][pos], ZC[pos], TOP);
+        double CB = BRDTH / SIDE[j][pos];
+        FLR(0) = CQ * CB;
+        FLR(1) = CB * std::copysign(CQ * CQ / HB, CQ);
+        FLR(3) = 4.905 * HB * HB;
         return;
     } else {
         KP = 4;
-        FLR[0] = 0;
-        FLR[1] = 0;
-        FLR[2] = 0;
-        FLR[3] = 4.905 * HI * HI;
+        FLR(0) = 0;
+        FLR(1) = 0;
+        FLR(2) = 0;
+        FLR(3) = 4.905 * H[TIME_PREV][pos] * H[TIME_PREV][pos];
     }
-    break;
   }
-
 }
+
 
 void OSHER(int t, int pos){
 
@@ -450,6 +452,33 @@ void LAQP(double X, double& Y, Vec A, Vec B, double MS) {
             Y = U * B[I] + V * B[I + 1] + W * B[I + 2];
         }
     }
+}
+
+double QD(double ZL, double ZR, double ZB) {
+    const double CM = 0.384;
+    const double SIGMA = 0.667;
+    const double FI = 4.43;
+
+    double ZU = std::max(ZL, ZR);
+    double ZD = std::min(ZL, ZR);
+    double H0 = ZU - ZB;
+    double HS = ZD - ZB;
+    double DELTA = HS / H0;
+
+    double QD;
+
+    if (DELTA <= SIGMA) {
+        QD = std::copysign(CM * std::pow(H0, 1.5), ZL - ZR);
+    } else {
+        double DH = ZU - ZD;
+        if (DH > 0.09) {
+            QD = std::copysign(FI * HS * std::sqrt(DH), ZL - ZR);
+        } else {
+            QD = std::copysign(FI * HS * 0.3 * DH / 0.1, ZL - ZR);
+        }
+    }
+
+    return QD;
 }
 
 // Kernel函数，具体可以放到其他核上跑
