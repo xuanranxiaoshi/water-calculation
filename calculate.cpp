@@ -69,6 +69,7 @@ Vec QR;
 Vec MBQ;
 Vec MBZ;
 Vec MBW;
+Vec MDI;
 Vec NV;
 Vec AREA;
 Vec FNC;
@@ -218,7 +219,7 @@ void calculate_HUV(int t, int pos) {
   }
   HSIDE = std::max(H[TIME_PREV][pos], HM1);
   DT2 = SIDEX / (U[TIME_PREV][pos] + std::sqrt(9.81 * HSIDE));
-  DT2 = std::min(DT, DT2);
+  DT2 = std::fmin(DT, DT2);
   DT2 = std::max(DT2, DT / 10.0);
   DTA = 1.0 * DT2 / (1.0 * AREA[pos]);
   WDTA = 1.00 * DTA;
@@ -775,8 +776,7 @@ void read_time() {
   fileTime.close();
 }
 
-void read_grid()
-{
+void read_grid() {
   PATH_CREATE("/GIRD.DAT");
   std::ifstream fileGrid(path);
   bool temp = fileGrid.is_open();
@@ -788,8 +788,7 @@ void read_grid()
   fileGrid.close();
 }
 
-void read_depth()
-{
+void read_depth() {
   PATH_CREATE("/DEPTH.DAT");
   std::ifstream fileDepth(path);
   ASSERT_READ(fileDepth);
@@ -799,8 +798,7 @@ void read_depth()
   fileDepth.close();
 }
 
-void read_boundary()
-{
+void read_boundary() {
   PATH_CREATE("/BOUNDARY.DAT");
   std::ifstream fileBoundary(path);
   ASSERT_READ(fileBoundary);
@@ -816,8 +814,7 @@ void read_boundary()
   fileBoundary.close();
 }
 
-void read_caltime()
-{
+void read_caltime() {
   PATH_CREATE("/CALTIME.DAT");
   std::ifstream fileCalTime(path);
   ASSERT_READ(fileCalTime);
@@ -836,13 +833,9 @@ void load_dat() {
   read_depth();
 }
 
-void pre2() {
+void pre2() {}
 
-}
-
-void take_boundary_for_two_d() {
-  
-}
+void take_boundary_for_two_d() {}
 
 void data_input_and_initialize() {
   load_dat();
@@ -855,7 +848,7 @@ int main() {
   // 必须串行执行的部分：
   // K0 = 2000
   double TAL = 0; // 将TAL（总面积）初始化为0
-  double K0 = (double) MDT / DT;
+  double K0 = (double)MDT / DT;
   for (int II = 1; II <= CEL; II++) { // 开始一个循环，II从1到CEL
     TAL += AREA[II];
   }
