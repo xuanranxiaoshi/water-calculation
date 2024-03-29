@@ -764,6 +764,17 @@ int main() {
   for(jt = 0; jt < 365; jt ++){
     // 由于需要区分天数和小时数，故每一天都至少需要做一次同步。
     // TODO: 补充边界插值
+    for (int l = 0; l < NZ; l++) {
+      if (jt != jtn) {
+          dzt[l] = (zt[jt + 1][l] - zt[jt][l]) / k0;
+      }
+    }
+
+    for (int l = 0; l < NQ; l++) {
+      if (jt != jtn) {
+        dqt[l] = (qt[jt + 1][l] - qt[jt][l]) / k0;
+      }
+    }
     for(kt = 0; kt < 2000; kt ++){
       // 可以考虑放到核上跑
       for (int pos = 0; pos < 24000; pos++){
