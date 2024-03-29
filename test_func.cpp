@@ -3,6 +3,9 @@
 #include <iterator>
 #include <vector>
 #include <cmath>
+#include <iostream>
+#include <fstream>
+#include <filesystem>
 
 #define TIME_NOW (t%2)
 #define TIME_PREV ((t-1)%2)
@@ -16,6 +19,8 @@ using std::vector;
 using Vec = vector<double>;
 using Vec2 = vector<vector<double>>;
 using Vec3 = vector<vector<vector<double>>>;
+
+namespace fs = std::filesystem;
 
 // TIME -> Y -> X
 // const value
@@ -734,12 +739,31 @@ void time_step(int t, int pos){
   calculate_HUV(t, pos);
 }
 
+void load_dat(){
+
+}
+
+void pre2(){
+
+}
+
+void take_boundary_for_two_d(){
+
+}
+
+void data_input_and_initialize(){
+  load_dat();
+  pre2();
+  take_boundary_for_two_d();
+}
+
 int main() {
   data_input_and_initialize();
   // 必须串行执行的部分：
   // K0 = 2000
   for(jt = 0; jt < 365; jt ++){
     // 由于需要区分天数和小时数，故每一天都至少需要做一次同步。
+    // TODO: 补充边界插值
     for(kt = 0; kt < 2000; kt ++){
       // 可以考虑放到核上跑
       for (int pos = 0; pos < 24000; pos++){
