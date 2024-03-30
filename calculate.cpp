@@ -71,6 +71,8 @@ Vec MBZ;
 Vec MBW;
 Vec MDI;
 Vec NV;
+Vec NNZ;
+Vec NNQ;
 Vec AREA;
 Vec FNC;
 Vec DQT;
@@ -78,6 +80,8 @@ Vec MBZQ;
 Vec DZT;
 Vec TOPW;
 Vec TOPD;
+Vec XP;
+Vec YP;
 
 // Origin scalar, but change to Matrix
 Vec CL;
@@ -101,6 +105,7 @@ Vec2 QT;
 Vec2 ZW;
 Vec2 ZT;
 Vec2 QW;
+Vec2 NAP;
 
 Vec2 COSF;
 Vec2 SINF;
@@ -833,7 +838,220 @@ void load_dat() {
   read_depth();
 }
 
-void pre2() {}
+void loadFromFilePNAC(const std::string p)
+{
+  PATH_CREATE(p);
+  std::ifstream file(path);
+  ASSERT_READ(file);
+  std::string line;
+  std::getline(file, line);
+  int NO;
+  NAC.resize(4, std::vector<double>(CEL));
+  for (int i = 0; i < CEL; i++)
+  {
+    std::getline(file, line);
+    std::istringstream iss(line);
+    iss >> NO;
+    for (int j = 0; j < 4; j++)
+    {
+      iss >> NAC[j][i];
+    }
+  }
+  file.close();
+}
+
+void loadFromFilePNAP(const std::string p)
+{
+  PATH_CREATE(p);
+  std::ifstream file(path);
+  ASSERT_READ(file);
+  std::string line;
+  std::getline(file, line);
+  int NO;
+  NAP.resize(4, std::vector<double>(CEL));
+  for (int i = 0; i < CEL; i++)
+  {
+    std::getline(file, line);
+    std::istringstream iss(line);
+    iss >> NO;
+    for (int j = 0; j < 4; j++)
+    {
+      iss >> NAP[j][i];
+    }
+  }
+  file.close();
+}
+
+void loadFromFilePKLAS(const std::string p)
+{
+  PATH_CREATE(p);
+  std::ifstream file(path);
+  ASSERT_READ(file);
+  std::string line;
+  std::getline(file, line);
+  int NO;
+  KLAS.resize(4, std::vector<double>(CEL));
+  for (int i = 0; i < CEL; i++)
+  {
+    std::getline(file, line);
+    std::istringstream iss(line);
+    iss >> NO;
+    for (int j = 0; j < 4; j++)
+    {
+      iss >> KLAS[j][i];
+    }
+  }
+  file.close();
+}
+
+void loadFromFilePZBC(const std::string p)
+{
+  PATH_CREATE(p);
+  std::ifstream file(path);
+  ASSERT_READ(file);
+  std::string line;
+  std::getline(file, line);
+  int NO;
+  ZBC.resize(CEL, 0);
+  for (int i = 0; i < CEL; i++)
+  {
+    std::getline(file, line);
+    std::istringstream iss(line);
+    iss >> ZBC[i];
+  }
+  file.close();
+}
+
+void loadFromFileMBZ(const std::string p)
+{
+  PATH_CREATE(p);
+  std::ifstream file(path);
+  ASSERT_READ(file);
+  std::string line;
+  std::getline(file, line);
+  int NO;
+  for (int i = 0; i < CEL; i++)
+  {
+    std::getline(file, line);
+    std::istringstream iss(line);
+    iss >> NO;
+    iss >> MBZ[i];
+    iss >> NNZ[i];
+  }
+  file.close();
+}
+
+void loadFromFileMBQ(const std::string p)
+{
+  PATH_CREATE(p);
+  std::ifstream file(path);
+  ASSERT_READ(file);
+  std::string line;
+  std::getline(file, line);
+  int NO;
+  MBQ.resize(CEL, 0);
+  NNQ.resize(CEL, 0);
+  for (int i = 0; i < CEL; i++)
+  {
+    std::getline(file, line);
+    std::istringstream iss(line);
+    iss >> NO;
+    iss >> MBQ[i];
+    iss >> NNQ[i];
+  }
+  file.close();
+}
+
+void loadFromFilePXY(const std::string p)
+{
+  PATH_CREATE(p);
+  std::ifstream file(path);
+  ASSERT_READ(file);
+  std::string line;
+  std::getline(file, line);
+  int NO;
+  for (int i = 1; i <= CEL; i++)
+  {
+    std::getline(file, line);
+    std::istringstream iss(line);
+    iss >> NO;
+    iss >> XP[i];
+    iss >> YP[i];
+  }
+  file.close();
+}
+
+void loadFromFileInitLevel(const std::string p)
+{
+  PATH_CREATE(p);
+  std::ifstream file(path);
+  ASSERT_READ(file);
+  std::string line;
+  std::getline(file, line);
+  int NO;
+  for (int i = 1; i <= CEL; i++)
+  {
+    std::getline(file, line);
+    std::istringstream iss(line);
+    iss >> Z1[i];
+  }
+  file.close();
+}
+
+void loadFromFileU1(const std::string p)
+{
+  PATH_CREATE(p);
+  std::ifstream file(path);
+  ASSERT_READ(file);
+  std::string line;
+  std::getline(file, line);
+  int NO;
+  for (int i = 1; i <= CEL; i++)
+  {
+    std::getline(file, line);
+    std::istringstream iss(line);
+    iss >> U1[i];
+  }
+  file.close();
+}
+
+void loadFromFileV1(const std::string p)
+{
+  PATH_CREATE(p);
+  std::ifstream file(path);
+  ASSERT_READ(file);
+  std::string line;
+  std::getline(file, line);
+  int NO;
+  for (int i = 1; i <= CEL; i++)
+  {
+    std::getline(file, line);
+    std::istringstream iss(line);
+    iss >> V1[i];
+  }
+  file.close();
+}
+
+void loadFromFileCV(const std::string p)
+{
+  PATH_CREATE(p);
+  std::ifstream file(path);
+  ASSERT_READ(file);
+  std::string line;
+  std::getline(file, line);
+  int NO;
+  for (int i = 1; i <= CEL; i++)
+  {
+    std::getline(file, line);
+    std::istringstream iss(line);
+    iss >> FNC0[i];
+  }
+  file.close();
+}
+
+void pre2() {
+
+}
 
 void take_boundary_for_two_d() {}
 
