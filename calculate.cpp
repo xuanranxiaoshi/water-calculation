@@ -1,4 +1,9 @@
 #include "read_data.hh"
+#include <cmath>
+#include <fstream>
+#include <iomanip>
+#include <pthread.h>
+#include <sstream>
 
 // TIME -> Y -> X
 // const value
@@ -24,7 +29,7 @@ int NNQ0;
 double HM1, HM2;
 double BI;
 double NHQ;
-double NZ;
+int NZ;
 double NQ;
 double STIME;
 
@@ -87,6 +92,8 @@ Vec2 NAP;
 Vec2 COSF;
 Vec2 SINF;
 
+// Origin one-dimention, but change to Vec2
+Vec2 FLR_OSHER;
 // one-dimention j-wise matrix
 Vec2 SIDE;
 Vec2 SLCOS;
@@ -108,16 +115,19 @@ void LAQP(double X, double &Y, Vec A, Vec B, double MS);
 double QD(double ZL, double ZR, double ZB);
 void QS(int k, int j, int pos);
 void QF(double H, double U, double V, Vec &F);
-void BOUNDRYinterp(double THOURS, double *ZQSTEMP1, int NZQSTEMP, Vec ZQSTIME,
-                   Vec ZQSTEMP);
-void data_input_and_initialize();
+double BOUNDRYinterp(double THOURS, int NZQSTEMP, Vec ZQSTIME, Vec ZQSTEMP);
 
 void calculate_FLUX(int t, int pos) {
   for (int j = 0; j < 4; j++) {
     // 局部变量初始化运算。
     double KP = KLAS[j][pos];
     double NC = NAC[j][pos];
-    double ZI = fmax(Z[TIME_PREV][pos], ZB1[pos]);
+    QL[0] = H[TIME_PREV][pos];
+    QL[1] = U[TIME_PREV][pos] * COSF[j][pos] + V[TIME_PREV][pos] * SINF[j][pos];
+    QL[2] = V[TIME_PREV][pos] * COSF[j][pos] - U[TIME_PREV][pos] * SINF[j][pos];
+    CL[pos] = std::sqrt(9.81 * H[TIME_PREV][pos]);
+    FIL[pos] = QL[1] + 2 * CL[pos];
+    double ZI = std::fmax(Z[TIME_PREV][pos], ZB1[pos]);
     if (NC == 0) {
       HC[pos] = 0;
       BC[pos] = 0;
@@ -125,7 +135,7 @@ void calculate_FLUX(int t, int pos) {
       UC[pos] = 0;
       VC[pos] = 0;
     } else {
-      HC[pos] = std::fmax(H[TIME_PREV][HM1], HM1);
+      HC[pos] = std::fmax(H[TIME_PREV][NC], HM1);
       BC[pos] = ZBC[NC];
       ZC[pos] = std::fmax(ZBC[NC], Z[TIME_PREV][NC]);
       UC[pos] = U[TIME_PREV][NC];
@@ -144,7 +154,7 @@ void calculate_FLUX(int t, int pos) {
                0);
     } else if (H[TIME_PREV][pos] <= HM2) {
       if (ZC[pos] > ZI) {
-        double DH = fmax(ZC[pos] - BI, HM1);
+        double DH = std::fmax(ZC[pos] - BI, HM1);
         double UN = -C1 * std::sqrt(DH);
         FLUX_VAL(DH * UN, FLR(0) * UN,
                  FLR(0) * (VC[pos] * COSF[j][pos] - UC[pos] * SINF[j][pos]),
@@ -155,7 +165,7 @@ void calculate_FLUX(int t, int pos) {
       }
     } else if (HC[pos] <= HM2) {
       if (ZI > ZC[pos]) {
-        double DH = fmax(ZC[pos] - BI, HM1);
+        double DH = std::fmax(ZC[pos] - BI, HM1);
         double UN = -C1 * std::sqrt(DH);
         double HC1 = ZC[pos] - BI;
         FLUX_VAL(DH * UN, FLR(0) * UN, FLR(0) * QL[2], 4.905 * HC1 * HC1);
@@ -165,7 +175,16 @@ void calculate_FLUX(int t, int pos) {
                  4.905 * H[TIME_PREV][pos] * H[TIME_PREV][pos]);
       }
     } else {
+      QR[0] = std::max(ZC[pos] - BI, HM1);
+      double UR = UC[pos] * COSF[j][pos] + VC[pos] * SINF[j][pos];
+      QR[1] = UR * std::min(HC[pos] / QR[0], 1.5);
+      if (HC[pos] <= HM2 || QR[0] <= HM2) {
+        QR[1] = std::copysign(VMIN, UR);
+      }
+      QR[2] = VC[pos] * COSF[j][pos] - UC[pos] * SINF[j][pos];
       OSHER(t, pos);
+      FLR(1) = FLR_OSHER[1][pos] + (1 - std::min(HC[pos] / QR[0], 1.5)) * HC[pos] * UR * UR / 2;
+      FLUX_VAL(FLR_OSHER[0][pos], FLR(1), FLR_OSHER[2][pos], FLR_OSHER[3][pos]);
     }
   }
 }
@@ -258,7 +277,8 @@ void BOUNDA(int t, int j, int pos) {
     FLUX_VAL(H[TIME_PREV][pos] * QL[1], FLR(0) * QL[1],
              4.905 * H[TIME_PREV][pos] * H[TIME_PREV][pos], FLR(0) * QL[1]);
   }
-
+  FLR(2) = 0;
+  if (QL[1] > 0) FLR(2) = H[TIME_PREV][pos] * QL[1] * QL[2]; 
   int II;
   double HB;
   if (KP == 10) {
@@ -589,12 +609,12 @@ void OSHER(int t, int pos) {
 
 void QS(int k, int j, int pos) {
   // COMPUTATION OF FLUX BASED ON LEFT, RIGHT OR INTERMEDIATE STATE
-  Vec F;
+  Vec F(4);
 
   if (k == 1) {
     QF(QL[0], QL[1], QL[2], F);
     for (int i = 0; i < 4; i++) {
-      FLR(i) += F[i] * j;
+      FLR_OSHER[i][pos] += F[i] * j;
     }
   }
 
@@ -603,7 +623,7 @@ void QS(int k, int j, int pos) {
     double HS = US * US / 9.81;
     QF(HS, US, QL[2], F);
     for (int i = 0; i < 4; i++) {
-      FLR(i) += F[i] * j;
+      FLR_OSHER[i][pos] += F[i] * j;
     }
   }
 
@@ -612,7 +632,7 @@ void QS(int k, int j, int pos) {
     double HA = FIL[pos] * FIL[pos] / 39.24;
     QF(HA, (FIL[pos] + FIR[pos]) / 2, QL[2], F);
     for (int i = 0; i < 4; i++) {
-      FLR(i) += F[i] * j;
+      FLR_OSHER[i][pos] += F[i] * j;
     }
   }
 
@@ -621,7 +641,7 @@ void QS(int k, int j, int pos) {
     double HA = FIR[pos] * FIR[pos] / 39.24;
     QF(HA, (FIL[pos] + FIR[pos]) / 2, QR[2], F);
     for (int i = 0; i < 4; i++) {
-      FLR(i) += F[i] * j;
+      FLR_OSHER[i][pos] += F[i] * j;
     }
   }
 
@@ -630,14 +650,14 @@ void QS(int k, int j, int pos) {
     double HS = US * US / 9.81;
     QF(HS, US, QR[2], F);
     for (int i = 0; i < 4; i++) {
-      FLR(i) += F[i] * j;
+      FLR_OSHER[i][pos] += F[i] * j;
     }
   }
 
   if (k == 7) {
     QF(QR[0], QR[1], QR[2], F);
     for (int i = 0; i < 4; i++) {
-      FLR(i) += F[i] * j;
+      FLR_OSHER[i][pos] += F[i] * j;
     }
   }
 }
@@ -825,6 +845,8 @@ void loadFromFileMBZ(const std::string p) {
   std::istringstream iss(line);
   iss >> NNZ0;
   int NO;
+  MBZ.resize(CEL, 0);
+  NNZ.resize(CEL, 0);
   for (int i = 0; i < CEL; i++) {
     std::getline(file, line);
     std::istringstream iss(line);
@@ -861,6 +883,8 @@ void loadFromFilePXY(const std::string p) {
   std::string line;
   std::getline(file, line);
   int NO;
+  XP.resize(CEL, 0);
+  YP.resize(CEL, 0);
   for (int i = 0; i < CEL; i++) {
     std::getline(file, line);
     std::istringstream iss(line);
@@ -934,16 +958,17 @@ void loadFromFileCV(const std::string p) {
 void pre2() {
   vector<int> NW;
   NW.resize(4, 0);
-  // loadFromFilePNAC("/SOURCES/PNAC.DAT");
-  // loadFromFilePNAP("/SOURCES/PNAP.DAT");
-  // loadFromFilePKLAS("/SOURCES/PKLAS.DAT");
-  // loadFromFilePZBC("/SOURCES/PZBC.DAT");
-  // loadFromFileMBZ("/SOURCES/MBZ.DAT");
-  // loadFromFileMBQ("/SOURCES/MBQ.DAT");
-  // loadFromFileInitLevel("/INITIALLEVEL.DAT");
-  // loadFromFileU1("/INITIALU1.DAT");
-  // loadFromFileV1("/INITIALV1.DAT");
-  // loadFromFileCV("/CV.DAT");
+  loadFromFilePNAC("/SOURCES/PNAC.DAT");
+  loadFromFilePNAP("/SOURCES/PNAP.DAT");
+  loadFromFilePKLAS("/SOURCES/PKLAS.DAT");
+  loadFromFilePZBC("/SOURCES/PZBC.DAT");
+  loadFromFilePXY("/SOURCES/PXY.DAT");
+  loadFromFileMBZ("/SOURCES/MBZ.DAT");
+  loadFromFileMBQ("/SOURCES/MBQ.DAT");
+  loadFromFileInitLevel("/INITIALLEVEL.DAT");
+  loadFromFileU1("/INITIALU1.DAT");
+  loadFromFileV1("/INITIALV1.DAT");
+  loadFromFileCV("/CV.DAT");
 
   std::sort(MBZ.begin(), MBZ.end());
   std::sort(NNZ.begin(), NNZ.end());
@@ -955,6 +980,13 @@ void pre2() {
     YP[i] -= YIMIN;
   }
 
+  ZB1.resize(CEL, 0);
+  NV.resize(CEL, 0);
+  NW.resize(CEL, 0);
+  SIDE.resize(4, vector<double>(CEL));
+  SINF.resize(4, vector<double>(CEL));
+  COSF.resize(4, vector<double>(CEL));
+  AREA.resize(CEL, 0);
   for (int i = 0; i < CEL; i++) {
     if (NAP[0][i] == 0) {
       continue;
@@ -1015,6 +1047,10 @@ void pre2() {
   // {
 
   // }
+  H.resize(2, Vec(CEL));
+  SLCOS.resize(4, vector<double>(CEL));
+  SLSIN.resize(4, vector<double>(CEL));
+  FNC.resize(CEL, 0);
   for (int i = 0; i < CEL; i++) {
     if (NAP[0][i] == 0) {
       continue;
@@ -1042,79 +1078,102 @@ void pre2() {
   }
 }
 
+// BUG:待修复
 void take_boundary_for_two_d() {
   // INCLUDE 相关的文件或数据结构的声明和定义
-
-  char pointname[80];
+  std::string pointname;
   double STIME1;
 
-  int K, I, J;
   int NZTEMP, NQTEMP;
-
-  // 打开多个数据文件
-  for (K = 1; K <= NNZ0; K++) {
-    sprintf(pointname, "%04d", K);
-    FILE *file = fopen(
-        ("..\\BOUNDE\\NZ\\NZ" + std::string(pointname) + ".dat").c_str(), "r");
-    if (file == NULL) {
-      // 错误处理
-      exit(EXIT_FAILURE);
+  QZSTIME1.resize(NZTEMP, 0);
+  QZSTEMP1.resize(NZTEMP, 0);
+  ZT.resize(NZ, vector<double>(NDAYS));
+  for (int k = 1; k <= NNZ0; k++) {
+    std::stringstream ss;
+    ss << std::setfill('0') << std::setw(4) << k;
+    pointname = data_root_path + "BOUNDE/NZ/NZ" + ss.str() + ".DAT";
+    cout << pointname << endl;
+    std::fstream NZ_file(pointname);
+    ASSERT_READ(NZ_file)
+    std::getline(NZ_file, current_line);
+    NZTEMP = readFromLine<int>(current_line);
+    for (int i = 0; i < NZTEMP; i++) {
+      std::getline(NZ_file, current_line);
+      std::istringstream iss(current_line);
+      iss >> QZSTIME1[i];
+      iss >> QZSTEMP1[i];
     }
-    fscanf(file, "%d", &NZTEMP);
-    for (I = 1; I <= NZTEMP; I++) {
-      fscanf(file, "%f %f", &QZSTIME1[I], &QZSTEMP1[I]);
-    }
-    for (I = 1; I <= NDAYS; I++) {
-      STIME1 = STIME + (I - 1) / (24.0 * 3600.0 / MDT);
-      double ZTTEMP;
-      BOUNDRYinterp(STIME1, &ZTTEMP, NZTEMP, QZSTIME1, QZSTEMP1);
-      for (J = 1; J <= NZ; J++) {
-        if (NNZ[J] == K) {
-          ZT[I][J] = ZTTEMP;
-          // WRITE(*,*) I, NNZ(J), ZT(I, NNZ(J))
-        }
+    for (int i = 0; i < NDAYS; i++) {
+      STIME1 = STIME + (i - 1) / (24.0 * 3600.0 / MDT);
+      for (int j = 0; j < NZ; j++) {
+        if (NNZ[j] == k)
+          ZT[j][i] = BOUNDRYinterp(STIME1, NZTEMP, QZSTIME1, QZSTEMP1);
       }
     }
-    fclose(file);
   }
 
-  for (K = 1; K <= NNQ0; K++) {
-    sprintf(pointname, "%04d", K);
-    FILE *file = fopen(
-        ("..\\BOUNDE\\NQ\\NQ" + std::string(pointname) + ".dat").c_str(), "r");
-    if (file == NULL) {
-      // 错误处理
-      exit(EXIT_FAILURE);
+  QZSTIME1.resize(NQTEMP, 0);
+  QZSTEMP1.resize(NQTEMP, 0);
+  QT.resize(NQ, vector<double>(NDAYS));
+  for (int k = 1; k <= NNQ0; k++) {
+    std::stringstream ss;
+    ss << std::setfill('0') << std::setw(4) << k;
+    pointname = data_root_path + "BOUNDE/NQ/NQ" + ss.str() + ".DAT";
+    cout << pointname << endl;
+    std::fstream NQ_file(pointname);
+    ASSERT_READ(NQ_file)
+    std::getline(NQ_file, current_line);
+    NQTEMP = readFromLine<int>(current_line);
+    for (int i = 0; i < NQTEMP; i++) {
+      std::getline(NQ_file, current_line);
+      std::istringstream iss(current_line);
+      iss >> QZSTIME2[i];
+      iss >> QZSTEMP2[i];
     }
-    fscanf(file, "%d", &NQTEMP);
-    for (I = 1; I <= NQTEMP; I++) {
-      fscanf(file, "%f %f", &QZSTIME2[I], &QZSTEMP2[I]);
-    }
-    for (I = 1; I <= NDAYS; I++) {
-      STIME1 = STIME + (I - 1) / (24.0 * 3600.0 / MDT);
-      double QTTEMP;
-      BOUNDRYinterp(STIME1, &QTTEMP, NQTEMP, QZSTIME2, QZSTEMP2);
-      for (J = 1; J <= NQ; J++) {
-        if (NNQ[J] == K) {
-          QT[I][J] = QTTEMP;
-        }
+    for (int i = 0; i < NDAYS; i++) {
+      STIME1 = STIME + (i - 1) / (24.0 * 3600.0 / MDT);
+      for (int j = 0; j < NQ; j++) {
+        if (NNQ[j] == k)
+          QT[j][i] = BOUNDRYinterp(STIME1, NQTEMP, QZSTIME2, QZSTEMP2);
       }
     }
-    fclose(file);
   }
+  // for (K = 1; K <= NNQ0; K++) {
+  //   sprintf(pointname, "%04d", K);
+  //   FILE *file = fopen(
+  //       ("../BOUNDE/NQ/NQ" + std::string(pointname) + ".dat").c_str(), "r");
+  //   if (file == NULL) {
+  //     // 错误处理
+  //     exit(EXIT_FAILURE);
+  //   }
+  //   fscanf(file, "%d", &NQTEMP);
+  //   for (I = 1; I <= NQTEMP; I++) {
+  //     fscanf(file, "%f %f", &QZSTIME2[I], &QZSTEMP2[I]);
+  //   }
+  //   for (I = 1; I <= NDAYS; I++) {
+  //     STIME1 = STIME + (I - 1) / (24.0 * 3600.0 / MDT);
+  //     double QTTEMP;
+  //     BOUNDRYinterp(STIME1, &QTTEMP, NQTEMP, QZSTIME2, QZSTEMP2);
+  //     for (J = 1; J <= NQ; J++) {
+  //       if (NNQ[J] == K) {
+  //         QT[I][J] = QTTEMP;
+  //       }
+  //     }
+  //   }
+  //   fclose(file);
+  // }
 }
 
-void BOUNDRYinterp(double THOURS, double *ZQSTEMP1, int NZQSTEMP, Vec ZQSTIME,
-                   Vec ZQSTEMP) {
-  int I;
-
-  for (I = 1; I < NZQSTEMP; I++) {
-    if (THOURS >= ZQSTIME[I] && THOURS <= ZQSTIME[I + 1]) {
-      *ZQSTEMP1 = ZQSTEMP[I] + (ZQSTEMP[I + 1] - ZQSTEMP[I]) /
-                                   (ZQSTIME[I + 1] - ZQSTIME[I]) *
-                                   (THOURS - ZQSTIME[I]);
+double BOUNDRYinterp(double THOURS, int NZQSTEMP, Vec ZQSTIME, Vec ZQSTEMP) {
+  double ZQSTEMP1;
+  for (int i = 0; i < NZQSTEMP; i++) {
+    if (THOURS >= ZQSTIME[i] && THOURS <= ZQSTIME[i + 1]) {
+      ZQSTEMP1 = ZQSTEMP[i] + (ZQSTEMP[i + 1] - ZQSTEMP[i]) /
+                                  (ZQSTIME[i + 1] - ZQSTIME[i]) *
+                                  (THOURS - ZQSTIME[i]);
     }
   }
+  return ZQSTEMP1;
 }
 
 int main() {
@@ -1125,6 +1184,24 @@ int main() {
   READ_DATA("CALTIME", dummy, DT)
   pre2();
   take_boundary_for_two_d();
+  DZT.resize(NZ, 0);
+  DQT.resize(NQ, 0);
+  HC.resize(CEL, 0);
+  BC.resize(CEL, 0);
+  ZC.resize(CEL, 0);
+  UC.resize(CEL, 0);
+  VC.resize(CEL, 0);
+  QR.resize(3, 0);
+  QL.resize(3, 0);
+  CL.resize(CEL, 0);
+  FIL.resize(CEL, 0);
+  FIR.resize(CEL, 0);
+  FLUX.resize(4, Vec2(4, Vec(CEL)));
+  WH.resize(CEL, 0);
+  WU.resize(CEL, 0);
+  WV.resize(CEL, 0);
+  W.resize(2, Vec(CEL, 0));
+  FLR_OSHER.resize(4, Vec(CEL, 0));
   // 必须串行执行的部分：
   // K0 = 2000
   double TAL = 0; // 将TAL（总面积）初始化为0
@@ -1141,18 +1218,20 @@ int main() {
       }
     }
 
-    for (int l = 0; l < NQ; l++) {
+    for (int l = 1; l < NQ; l++) {
       if (jt != NDAYS) {
         DQT[l] = (QT[jt + 1][l] - QT[jt][l]) / K0;
       }
     }
 
-    for (kt = 0; kt < 2000; kt++) {
+    for (kt = 1; kt < 2000; kt++) {
       // 可以考虑放到核上跑
       for (int pos = 0; pos < 24000; pos++) {
         time_step(kt, pos);
       }
     }
+
+    cout << jt << endl;
   }
   return 0;
 }
