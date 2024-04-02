@@ -26,7 +26,6 @@ int NNQ0;
 
 // scalar
 double HM1, HM2;
-double BI;
 double NHQ;
 int NZ;
 int NQ;
@@ -38,8 +37,6 @@ Vec WU;
 Vec WV;
 Vec ZB1;
 Vec ZBC;
-Vec QL;
-Vec QR;
 Vec MBQ;
 Vec MBZ;
 Vec MBW;
@@ -93,6 +90,8 @@ Vec2 SINF;
 
 // Origin one-dimention, but change to Vec2
 Vec2 FLR_OSHER;
+Vec2 QL;
+Vec2 QR;
 // one-dimention j-wise matrix
 Vec2 SIDE;
 Vec2 SLCOS;
@@ -121,11 +120,11 @@ void calculate_FLUX(int t, int pos) {
     // 局部变量初始化运算。
     double KP = KLAS[j][pos];
     double NC = NAC[j][pos];
-    QL[0] = H[TIME_PREV][pos];
-    QL[1] = U[TIME_PREV][pos] * COSF[j][pos] + V[TIME_PREV][pos] * SINF[j][pos];
-    QL[2] = V[TIME_PREV][pos] * COSF[j][pos] - U[TIME_PREV][pos] * SINF[j][pos];
+    QL[0][pos] = H[TIME_PREV][pos];
+    QL[1][pos] = U[TIME_PREV][pos] * COSF[j][pos] + V[TIME_PREV][pos] * SINF[j][pos];
+    QL[2][pos] = V[TIME_PREV][pos] * COSF[j][pos] - U[TIME_PREV][pos] * SINF[j][pos];
     CL[pos] = std::sqrt(9.81 * H[TIME_PREV][pos]);
-    FIL[pos] = QL[1] + 2 * CL[pos];
+    FIL[pos] = QL[1][pos] + 2 * CL[pos];
     double ZI = std::fmax(Z[TIME_PREV][pos], ZB1[pos]);
     if (NC == 0) {
       HC[pos] = 0;
@@ -141,48 +140,48 @@ void calculate_FLUX(int t, int pos) {
       VC[pos] = V[TIME_PREV][NC];
     }
 
-    if (KP >= 1 && KP <= 8 || KP >= 10) {
+    if ((KP >= 1 && KP <= 8) || KP >= 10) {
       BOUNDA(t, j, pos);
     } else if (H[TIME_PREV][pos] <= HM1 && HC[pos] <= HM1) {
       FLUX_VAL(0, 0, 0, 0);
     } else if (ZI <= BC[pos]) {
-      FLUX_VAL(-C1 * pow(HC[pos], 1.5), H[TIME_PREV][pos] * QL[1] * fabs(QL[1]),
+      FLUX_VAL(-C1 * pow(HC[pos], 1.5), H[TIME_PREV][pos] * QL[1][pos] * fabs(QL[1][pos]),
                0, 4.905 * H[TIME_PREV][pos] * H[TIME_PREV][pos]);
-    } else if (ZC[pos] <= BI) {
-      FLUX_VAL(C1 * pow(H[TIME_PREV][pos], 1.5), FLR(0) * QL[1], FLR(0) * QL[2],
+    } else if (ZC[pos] <= ZBC[pos]) {
+      FLUX_VAL(C1 * pow(H[TIME_PREV][pos], 1.5), FLR(0) * QL[1][pos], FLR(0) * QL[2][pos],
                0);
     } else if (H[TIME_PREV][pos] <= HM2) {
       if (ZC[pos] > ZI) {
-        double DH = std::fmax(ZC[pos] - BI, HM1);
+        double DH = std::fmax(ZC[pos] - ZBC[pos], HM1);
         double UN = -C1 * std::sqrt(DH);
         FLUX_VAL(DH * UN, FLR(0) * UN,
                  FLR(0) * (VC[pos] * COSF[j][pos] - UC[pos] * SINF[j][pos]),
                  4.905 * H[TIME_PREV][pos] * H[TIME_PREV][pos]);
       } else {
-        FLUX_VAL(-C1 * pow(HC[pos], 1.5), 0, 0,
+        FLUX_VAL(C1 * pow(HC[pos], 1.5), 0, 0,
                  4.905 * H[TIME_PREV][pos] * H[TIME_PREV][pos]);
       }
     } else if (HC[pos] <= HM2) {
       if (ZI > ZC[pos]) {
-        double DH = std::fmax(ZC[pos] - BI, HM1);
-        double UN = -C1 * std::sqrt(DH);
-        double HC1 = ZC[pos] - BI;
-        FLUX_VAL(DH * UN, FLR(0) * UN, FLR(0) * QL[2], 4.905 * HC1 * HC1);
+        double DH = std::fmax(ZI - BC[pos], HM1);
+        double UN = C1 * std::sqrt(DH);
+        double HC1 = ZC[pos] - ZBC[pos];
+        FLUX_VAL(DH * UN, FLR(0) * UN, FLR(0) * QL[2][pos], 4.905 * HC1 * HC1);
       } else {
-        FLUX_VAL(-HC[pos] * C1 * sqrt(HC[pos]),
-                 H[TIME_PREV][pos] * QL[1] * QL[1], 0,
+        FLUX_VAL(-C1 * pow(HC[pos], 1.5),
+                 H[TIME_PREV][pos] * QL[1][pos] * QL[1][pos], 0,
                  4.905 * H[TIME_PREV][pos] * H[TIME_PREV][pos]);
       }
     } else {
-      QR[0] = std::max(ZC[pos] - BI, HM1);
+      QR[0][pos] = std::max(ZC[pos] - ZBC[pos], HM1);
       double UR = UC[pos] * COSF[j][pos] + VC[pos] * SINF[j][pos];
-      QR[1] = UR * std::min(HC[pos] / QR[0], 1.5);
-      if (HC[pos] <= HM2 || QR[0] <= HM2) {
-        QR[1] = std::copysign(VMIN, UR);
+      QR[1][pos] = UR * std::min(HC[pos] / QR[0][pos], 1.5);
+      if (HC[pos] <= HM2 || QR[0][pos] <= HM2) {
+        QR[1][pos] = std::copysign(VMIN, UR);
       }
-      QR[2] = VC[pos] * COSF[j][pos] - UC[pos] * SINF[j][pos];
+      QR[2][pos] = VC[pos] * COSF[j][pos] - UC[pos] * SINF[j][pos];
       OSHER(t, pos);
-      FLR(1) = FLR_OSHER[1][pos] + (1 - std::min(HC[pos] / QR[0], 1.5)) * HC[pos] * UR * UR / 2;
+      FLR(1) = FLR_OSHER[1][pos] + (1 - std::min(HC[pos] / QR[0][pos], 1.5)) * HC[pos] * UR * UR / 2;
       FLUX_VAL(FLR_OSHER[0][pos], FLR(1), FLR_OSHER[2][pos], FLR_OSHER[3][pos]);
     }
   }
@@ -207,7 +206,7 @@ void calculate_WHUV(int t, int pos) {
 
 void calculate_HUV(int t, int pos) {
   double SIDEX, SIDES, HSIDE, DT2, DTA, WDTA;
-  double QX1, QY1, DTAU, DTAV, FNCC, WSF;
+  double QX1, QY1, DTAU, DTAV, WSF;
 
   if (NV[pos] == 4) {
     SIDEX = std::min(0.5 * (SIDE[0][pos] + SIDE[2][pos]),
@@ -240,9 +239,7 @@ void calculate_HUV(int t, int pos) {
       QY1 = H[TIME_PREV][pos] * V[TIME_PREV][pos];
       DTAU = WDTA * WU[pos];
       DTAV = WDTA * WV[pos];
-
-      FNCC = FNC[pos];
-      WSF = FNCC *
+      WSF = FNC[pos] *
             std::sqrt(U[TIME_PREV][pos] * U[TIME_PREV][pos] +
                       V[TIME_PREV][pos] * V[TIME_PREV][pos]) /
             std::pow(H[TIME_PREV][pos], 0.33333);
@@ -272,12 +269,12 @@ void BOUNDA(int t, int j, int pos) {
   double BRDTH = 100.0;
   int KP;
 
-  if (QL[1] > CL[pos]) {
-    FLUX_VAL(H[TIME_PREV][pos] * QL[1], FLR(0) * QL[1],
-             4.905 * H[TIME_PREV][pos] * H[TIME_PREV][pos], FLR(0) * QL[1]);
+  if (QL[1][pos] > CL[pos]) {
+    FLUX_VAL(H[TIME_PREV][pos] * QL[1][pos], FLR(0) * QL[1][pos],
+             4.905 * H[TIME_PREV][pos] * H[TIME_PREV][pos], FLR(0) * QL[1][pos]);
   }
   FLR(2) = 0;
-  if (QL[1] > 0) FLR(2) = H[TIME_PREV][pos] * QL[1] * QL[2]; 
+  if (QL[1][pos] > 0) FLR(2) = H[TIME_PREV][pos] * QL[1][pos] * QL[2][pos]; 
   int II;
   double HB;
   if (KP == 10) {
@@ -312,7 +309,7 @@ void BOUNDA(int t, int j, int pos) {
       WQ[i] = QW[i][II];
     }
     for (int I1 = 0; I1 < 20; I1++) {
-      double ZR0 = HR0 + BI;
+      double ZR0 = HR0 + ZBC[pos];
       LAQP(ZR0, CQ, WZ, WQ, NHQ);
       W = FIL[pos] - CQ / HR0;
       HR = W * W / 39.24;
@@ -326,9 +323,9 @@ void BOUNDA(int t, int j, int pos) {
     FLR(3) = 4.905 * HB * HB;
   } else if (KP == 1) {
     CHOICE(MBZ, pos, II);
-    double HB1 = ZT[jt][II] + DZT[II] * t - BI;
-    double FIAL = QL[2] + 6.264 * sqrt(H[TIME_PREV][pos]);
-    double UR0 = QL[2];
+    double HB1 = ZT[jt][II] + DZT[II] * t - ZBC[pos];
+    double FIAL = QL[2][pos] + 6.264 * sqrt(H[TIME_PREV][pos]);
+    double UR0 = QL[2][pos];
     double URB = UR0;
     for (int IURB = 1; IURB <= 30; IURB++) {
       double FIAR = URB - 6.264 * sqrt(HB1);
@@ -346,9 +343,9 @@ void BOUNDA(int t, int j, int pos) {
     FLR(2) = 0;
     FLR(3) = 4.905 * H[TIME_PREV][pos] * H[TIME_PREV][pos];
   } else if (KP == 5) {
-    QL[1] = std::max(QL[1], 0.0);
-    FLR(0) = H[TIME_PREV][pos] * QL[1];
-    FLR(1) = FLR(0) * QL[1];
+    QL[1][pos] = std::max(QL[1][pos], 0.0);
+    FLR(0) = H[TIME_PREV][pos] * QL[1][pos];
+    FLR(1) = FLR(0) * QL[1][pos];
     FLR(3) = 4.905 * H[TIME_PREV][pos] * H[TIME_PREV][pos];
   } else if (KP == 6) {
     double NC = NAC[j][pos];
@@ -367,9 +364,9 @@ void BOUNDA(int t, int j, int pos) {
     }
     if (Z[TIME_PREV][pos] > TOP && ZC[pos] < TOP) {
       FLR(0) = C0 * std::pow(Z[TIME_PREV][pos] - TOP, 1.5);
-      FLR(1) = FLR(0) * QL[1];
-      FLR(2) = FLR(0) * QL[2];
-      FLR(3) = 4.905 * std::pow(TOP - BI, 2);
+      FLR(1) = FLR(0) * QL[1][pos];
+      FLR(2) = FLR(0) * QL[2][pos];
+      FLR(3) = 4.905 * std::pow(TOP - ZBC[pos], 2);
       return;
     }
     if (Z[TIME_PREV][pos] < TOP && ZC[pos] > TOP) {
@@ -377,7 +374,7 @@ void BOUNDA(int t, int j, int pos) {
       FLR(1) = FLR(0) *
                std::min(UC[pos] * COSF[j][pos] + VC[pos] * SINF[j][pos], 0.0);
       FLR(2) = FLR(0) * (VC[pos] * COSF[j][pos] - UC[pos] * SINF[j][pos]);
-      FLR(3) = 4.905 * std::pow(Z[TIME_PREV][pos] - BI, 2);
+      FLR(3) = 4.905 * std::pow(Z[TIME_PREV][pos] - ZBC[pos], 2);
       return;
     }
     double DZ = std::abs(Z[TIME_PREV][pos] - ZC[pos]);
@@ -390,8 +387,8 @@ void BOUNDA(int t, int j, int pos) {
       VT = VC[pos] * COSF[j][pos] - UC[pos] * SINF[j][pos];
     } else {
       HD = ZC[pos] - TOP;
-      UN = std::max(QL[1], 0.0);
-      VT = QL[2];
+      UN = std::max(QL[1][pos], 0.0);
+      VT = QL[2][pos];
     }
     double SH = HD + DZ;
     double CE = std::min(1.0, 1.05 * std::pow(DZ / SH, 0.33333));
@@ -402,7 +399,7 @@ void BOUNDA(int t, int j, int pos) {
         std::copysign(CE * C1 * std::pow(SH, 1.5), Z[TIME_PREV][pos] - ZC[pos]);
     FLR(1) = FLR(0) * std::abs(UN);
     FLR(2) = FLR(0) * VT;
-    FLR(3) = 4.905 * std::pow(TOP - BI, 2);
+    FLR(3) = 4.905 * std::pow(TOP - ZBC[pos], 2);
   } else if (KP == 7) {
     CHOICE(MDI, pos, II);
     double TOP = TOPD[II];
@@ -426,13 +423,13 @@ void BOUNDA(int t, int j, int pos) {
 }
 
 void OSHER(int t, int pos) {
-  double CR = sqrt(9.81 * QR[0]);
-  FIR[pos] = QR[1] - 2 * CR;
+  double CR = sqrt(9.81 * QR[0][pos]);
+  FIR[pos] = QR[1][pos] - 2 * CR;
   double UA = (FIL[pos] + FIR[pos]) / 2;
   double CA = fabs((FIL[pos] - FIR[pos]) / 4);
 
   int K1, K2;
-  if (QL[1] < CL[pos] && QR[1] >= -CR) {
+  if (QL[1][pos] < CL[pos] && QR[1][pos] >= -CR) {
     K1 = 1;
   } else {
     if (CA < UA) {
@@ -449,7 +446,7 @@ void OSHER(int t, int pos) {
     }
   }
 
-  if (QL[1] >= CL[pos] && QR[1] >= -CR) {
+  if (QL[1][pos] >= CL[pos] && QR[1][pos] >= -CR) {
     K1 = 2;
   } else {
     if (CA < UA) {
@@ -466,7 +463,7 @@ void OSHER(int t, int pos) {
     }
   }
 
-  if (QL[1] < CL[pos] && QR[1] < -CR) {
+  if (QL[1][pos] < CL[pos] && QR[1][pos] < -CR) {
     K1 = 3;
   } else {
     if (CA < UA) {
@@ -483,7 +480,7 @@ void OSHER(int t, int pos) {
     }
   }
 
-  if (QL[1] >= CL[pos] && QR[1] < -CR) {
+  if (QL[1][pos] >= CL[pos] && QR[1][pos] < -CR) {
     K1 = 4;
   } else {
     if (CA < UA) {
@@ -611,7 +608,7 @@ void QS(int k, int j, int pos) {
   Vec F(4);
 
   if (k == 1) {
-    QF(QL[0], QL[1], QL[2], F);
+    QF(QL[0][pos], QL[1][pos], QL[2][pos], F);
     for (int i = 0; i < 4; i++) {
       FLR_OSHER[i][pos] += F[i] * j;
     }
@@ -620,7 +617,7 @@ void QS(int k, int j, int pos) {
   if (k == 2) {
     double US = FIL[pos] / 3;
     double HS = US * US / 9.81;
-    QF(HS, US, QL[2], F);
+    QF(HS, US, QL[2][pos], F);
     for (int i = 0; i < 4; i++) {
       FLR_OSHER[i][pos] += F[i] * j;
     }
@@ -629,7 +626,7 @@ void QS(int k, int j, int pos) {
   if (k == 3) {
     FIL[pos] = FIL[pos] - (FIL[pos] + FIR[pos]) / 2;
     double HA = FIL[pos] * FIL[pos] / 39.24;
-    QF(HA, (FIL[pos] + FIR[pos]) / 2, QL[2], F);
+    QF(HA, (FIL[pos] + FIR[pos]) / 2, QL[2][pos], F);
     for (int i = 0; i < 4; i++) {
       FLR_OSHER[i][pos] += F[i] * j;
     }
@@ -638,7 +635,7 @@ void QS(int k, int j, int pos) {
   if (k == 5) {
     FIR[pos] = FIR[pos] - (FIL[pos] + FIR[pos]) / 2;
     double HA = FIR[pos] * FIR[pos] / 39.24;
-    QF(HA, (FIL[pos] + FIR[pos]) / 2, QR[2], F);
+    QF(HA, (FIL[pos] + FIR[pos]) / 2, QR[2][pos], F);
     for (int i = 0; i < 4; i++) {
       FLR_OSHER[i][pos] += F[i] * j;
     }
@@ -647,14 +644,14 @@ void QS(int k, int j, int pos) {
   if (k == 6) {
     double US = FIR[pos] / 3;
     double HS = US * US / 9.81;
-    QF(HS, US, QR[2], F);
+    QF(HS, US, QR[2][pos], F);
     for (int i = 0; i < 4; i++) {
       FLR_OSHER[i][pos] += F[i] * j;
     }
   }
 
   if (k == 7) {
-    QF(QR[0], QR[1], QR[2], F);
+    QF(QR[0][pos], QR[1][pos], QR[2][pos], F);
     for (int i = 0; i < 4; i++) {
       FLR_OSHER[i][pos] += F[i] * j;
     }
@@ -675,7 +672,7 @@ void CHOICE(Vec list, double target, int &index) {
 }
 
 void LAQP(double X, double &Y, Vec A, Vec B, double MS) {
-  NHQ = 5;
+  int NHQ = 5;
   int ILAQ = 0;
   int I;
 
@@ -750,14 +747,6 @@ double QD(double ZL, double ZR, double ZB) {
   }
 
   return QD;
-}
-
-// Kernel函数，具体可以放到其他核上跑
-// 0 <= pos <= CEL
-void time_step(int t, int pos) {
-  calculate_FLUX(t, pos);
-  calculate_WHUV(t, pos);
-  calculate_HUV(t, pos);
 }
 
 template <typename T> T readFromLine(const std::string &line) {
@@ -1032,20 +1021,6 @@ void pre2() {
     ZB1[i] = ZBC[i] + HM1;
   }
 
-  // if (JT0 > 1)
-  // {
-  //   std::ifstream file("HUVZ.DAT", std::ios::binary);
-  //   file.read(reinterpret_cast<char *>(&H1[0]), CEL * sizeof(int));
-  //   file.read(reinterpret_cast<char *>(&U1[0]), CEL * sizeof(int));
-  //   file.read(reinterpret_cast<char *>(&V1[0]), CEL * sizeof(int));
-  //   file.read(reinterpret_cast<char *>(&Z1[0]), CEL * sizeof(int));
-  //   file.read(reinterpret_cast<char *>(&KLAS[0]), CEL * sizeof(int));
-  //   file.close();
-  // }
-  // else
-  // {
-
-  // }
   H.resize(2, Vec(CEL));
   SLCOS.resize(4, vector<double>(CEL));
   SLSIN.resize(4, vector<double>(CEL));
@@ -1150,7 +1125,24 @@ double BOUNDRYinterp(double THOURS, int NZQSTEMP, Vec ZQSTIME, Vec ZQSTEMP) {
   return ZQSTEMP1;
 }
 
+// Kernel函数，具体可以放到其他核上跑
+// 0 <= pos <= CEL
+void time_step(int t, int pos) {
+  for(int k = 0; k < NV[pos]; k++){
+    if (NAC[k][pos] == 0 && KLAS[k][pos] != 0) calculate_FLUX(t, pos);
+    if (NAC[k][pos] != 0 && H[TIME_PREV][NAC[k][pos]] > HM1)calculate_FLUX(t, pos);
+  }
+  calculate_WHUV(t, pos);
+  calculate_HUV(t, pos);
+}
+
+
 int main() {
+  READ_DATA("TIME", MDT, NDAYS)
+  READ_DATA("GIRD", NOD, CEL)
+  READ_DATA("DEPTH", HM1, HM2)
+  READ_DATA("BOUNDARY", NZ, NQ, dummy, NHQ, dummy, NDI)
+  READ_DATA("CALTIME", dummy, DT)
   DZT.resize(NZ, 0);
   DQT.resize(NQ, 0);
   HC.resize(CEL, 0);
@@ -1158,8 +1150,8 @@ int main() {
   ZC.resize(CEL, 0);
   UC.resize(CEL, 0);
   VC.resize(CEL, 0);
-  QR.resize(3, 0);
-  QL.resize(3, 0);
+  QR.resize(3, Vec(CEL, 0));
+  QL.resize(3, Vec(CEL, 0));
   CL.resize(CEL, 0);
   FIL.resize(CEL, 0);
   FIR.resize(CEL, 0);
@@ -1169,11 +1161,6 @@ int main() {
   WV.resize(CEL, 0);
   W.resize(2, Vec(CEL, 0));
   FLR_OSHER.resize(4, Vec(CEL, 0));
-  READ_DATA("TIME", MDT, NDAYS)
-  READ_DATA("GIRD", NOD, CEL)
-  READ_DATA("DEPTH", HM1, HM2)
-  READ_DATA("BOUNDARY", NZ, NQ, dummy, NHQ, dummy, NDI)
-  READ_DATA("CALTIME", dummy, DT)
   pre2();
   take_boundary_for_two_d();
 
@@ -1195,7 +1182,7 @@ int main() {
       }
     }
 
-    for (kt = 1; kt < 2000; kt++) {
+    for (kt = 1; kt <= 2000; kt++) {
       // 可以考虑放到核上跑
       for (int pos = 0; pos < 24000; pos++) {
         time_step(kt, pos);
