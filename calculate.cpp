@@ -2,7 +2,6 @@
 #include <cmath>
 #include <fstream>
 #include <iomanip>
-#include <pthread.h>
 #include <sstream>
 
 // TIME -> Y -> X
@@ -30,7 +29,7 @@ double HM1, HM2;
 double BI;
 double NHQ;
 int NZ;
-double NQ;
+int NQ;
 double STIME;
 
 // no-state matrix
@@ -676,7 +675,7 @@ void CHOICE(Vec list, double target, int &index) {
 }
 
 void LAQP(double X, double &Y, Vec A, Vec B, double MS) {
-  const int NHQ = 5;
+  NHQ = 5;
   int ILAQ = 0;
   int I;
 
@@ -1078,7 +1077,6 @@ void pre2() {
   }
 }
 
-// BUG:待修复
 void take_boundary_for_two_d() {
   // INCLUDE 相关的文件或数据结构的声明和定义
   std::string pointname;
@@ -1138,30 +1136,6 @@ void take_boundary_for_two_d() {
       }
     }
   }
-  // for (K = 1; K <= NNQ0; K++) {
-  //   sprintf(pointname, "%04d", K);
-  //   FILE *file = fopen(
-  //       ("../BOUNDE/NQ/NQ" + std::string(pointname) + ".dat").c_str(), "r");
-  //   if (file == NULL) {
-  //     // 错误处理
-  //     exit(EXIT_FAILURE);
-  //   }
-  //   fscanf(file, "%d", &NQTEMP);
-  //   for (I = 1; I <= NQTEMP; I++) {
-  //     fscanf(file, "%f %f", &QZSTIME2[I], &QZSTEMP2[I]);
-  //   }
-  //   for (I = 1; I <= NDAYS; I++) {
-  //     STIME1 = STIME + (I - 1) / (24.0 * 3600.0 / MDT);
-  //     double QTTEMP;
-  //     BOUNDRYinterp(STIME1, &QTTEMP, NQTEMP, QZSTIME2, QZSTEMP2);
-  //     for (J = 1; J <= NQ; J++) {
-  //       if (NNQ[J] == K) {
-  //         QT[I][J] = QTTEMP;
-  //       }
-  //     }
-  //   }
-  //   fclose(file);
-  // }
 }
 
 double BOUNDRYinterp(double THOURS, int NZQSTEMP, Vec ZQSTIME, Vec ZQSTEMP) {
@@ -1177,13 +1151,6 @@ double BOUNDRYinterp(double THOURS, int NZQSTEMP, Vec ZQSTIME, Vec ZQSTEMP) {
 }
 
 int main() {
-  READ_DATA("TIME", MDT, NDAYS)
-  READ_DATA("GIRD", NOD, CEL)
-  READ_DATA("DEPTH", HM1, HM2)
-  READ_DATA("BOUNDARY", NZ, NQ, dummy, NHQ, dummy, NDI)
-  READ_DATA("CALTIME", dummy, DT)
-  pre2();
-  take_boundary_for_two_d();
   DZT.resize(NZ, 0);
   DQT.resize(NQ, 0);
   HC.resize(CEL, 0);
@@ -1202,13 +1169,17 @@ int main() {
   WV.resize(CEL, 0);
   W.resize(2, Vec(CEL, 0));
   FLR_OSHER.resize(4, Vec(CEL, 0));
+  READ_DATA("TIME", MDT, NDAYS)
+  READ_DATA("GIRD", NOD, CEL)
+  READ_DATA("DEPTH", HM1, HM2)
+  READ_DATA("BOUNDARY", NZ, NQ, dummy, NHQ, dummy, NDI)
+  READ_DATA("CALTIME", dummy, DT)
+  pre2();
+  take_boundary_for_two_d();
+
   // 必须串行执行的部分：
   // K0 = 2000
-  double TAL = 0; // 将TAL（总面积）初始化为0
-  double K0 = (double)MDT / DT;
-  for (int II = 1; II <= CEL; II++) { // 开始一个循环，II从1到CEL
-    TAL += AREA[II];
-  }
+  double K0 = (double) MDT / DT;
   for (jt = 0; jt < NDAYS; jt++) {
     // 由于需要区分天数和小时数，故每一天都至少需要做一次同步。
     // TODO: 补充边界插值
