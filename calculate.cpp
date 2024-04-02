@@ -1085,8 +1085,6 @@ void take_boundary_for_two_d() {
   double STIME1;
 
   int NZTEMP, NQTEMP;
-  QZSTIME1.resize(NZTEMP, 0);
-  QZSTEMP1.resize(NZTEMP, 0);
   ZT.resize(NZ, vector<double>(NDAYS));
   for (int k = 1; k <= NNZ0; k++) {
     std::stringstream ss;
@@ -1097,6 +1095,8 @@ void take_boundary_for_two_d() {
     ASSERT_READ(NZ_file)
     std::getline(NZ_file, current_line);
     NZTEMP = readFromLine<int>(current_line);
+    QZSTIME1.resize(NZTEMP, 0);
+    QZSTEMP1.resize(NZTEMP, 0);
     for (int i = 0; i < NZTEMP; i++) {
       std::getline(NZ_file, current_line);
       std::istringstream iss(current_line);
