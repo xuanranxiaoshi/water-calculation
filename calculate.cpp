@@ -1,8 +1,5 @@
 #include "read_data.hh"
-#include <cmath>
-#include <fstream>
-#include <iomanip>
-#include <sstream>
+#include "common.hh"
 
 // TIME -> Y -> X
 // const value
@@ -52,9 +49,7 @@ Vec DZT;
 Vec TOPW;
 Vec TOPD;
 Vec XP;
-Vec XP0;
 Vec YP;
-Vec YP0;
 Vec FNC0;
 Vec QZSTIME1;
 Vec QZSTEMP1;
@@ -77,13 +72,13 @@ Vec2 U;
 Vec2 V;
 Vec2 Z;
 Vec2 KLAS;
-Vec2 NAC;
+vector<vector<int>> NAC;
 Vec2 W;
 Vec2 QT;
 Vec2 ZW;
 Vec2 ZT;
 Vec2 QW;
-Vec2 NAP;
+vector<vector<int>> NAP;
 
 Vec2 COSF;
 Vec2 SINF;
@@ -119,7 +114,7 @@ void calculate_FLUX(int t, int pos) {
   for (int j = 0; j < 4; j++) {
     // 局部变量初始化运算。
     double KP = KLAS[j][pos];
-    double NC = NAC[j][pos];
+    int NC = NAC[j][pos] - 1;
     QL[0][pos] = H[TIME_PREV][pos];
     QL[1][pos] = U[TIME_PREV][pos] * COSF[j][pos] + V[TIME_PREV][pos] * SINF[j][pos];
     QL[2][pos] = V[TIME_PREV][pos] * COSF[j][pos] - U[TIME_PREV][pos] * SINF[j][pos];
@@ -173,7 +168,7 @@ void calculate_FLUX(int t, int pos) {
                  4.905 * H[TIME_PREV][pos] * H[TIME_PREV][pos]);
       }
     } else {
-      QR[0][pos] = std::max(ZC[pos] - ZBC[pos], HM1);
+      QR[0][pos] = std::fmax(ZC[pos] - ZBC[pos], HM1);
       double UR = UC[pos] * COSF[j][pos] + VC[pos] * SINF[j][pos];
       QR[1][pos] = UR * std::min(HC[pos] / QR[0][pos], 1.5);
       if (HC[pos] <= HM2 || QR[0][pos] <= HM2) {
@@ -200,7 +195,7 @@ void calculate_WHUV(int t, int pos) {
     double SLSA = SLSIN[j][pos];
     WH[pos] += SL * FLUX[0][j][pos];
     WU[pos] += SLCA * FLR(1) - SLSA * FLR(2);
-    WV[pos] += SLSA * FLR(1) - SLCA * FLR(2);
+    WV[pos] += SLSA * FLR(1) + SLCA * FLR(2);
   }
 }
 
@@ -267,7 +262,6 @@ void BOUNDA(int t, int j, int pos) {
   double S0 = 0.0002;
   double DX2 = 5000.0;
   double BRDTH = 100.0;
-  int KP;
 
   if (QL[1][pos] > CL[pos]) {
     FLUX_VAL(H[TIME_PREV][pos] * QL[1][pos], FLR(0) * QL[1][pos],
@@ -277,7 +271,7 @@ void BOUNDA(int t, int j, int pos) {
   if (QL[1][pos] > 0) FLR(2) = H[TIME_PREV][pos] * QL[1][pos] * QL[2][pos]; 
   int II;
   double HB;
-  if (KP == 10) {
+  if (KLAS[j][pos] == 10) {
     CHOICE(MBQ, pos, II);
     FLR(0) = -(QT[jt][II] + DQT[II] * t);
     FLR(0) = FLR(0) / SIDE[j][pos];
@@ -298,10 +292,10 @@ void BOUNDA(int t, int j, int pos) {
     }
     FLR(2) = 0;
     FLR(3) = 4.905 * HB * HB;
-  } else if (KP == 3) {
+  } else if (KLAS[j][pos] == 3) {
     double CQ;
     double HR;
-    double W;
+    double W_temp;
     double HR0 = H[TIME_PREV][pos];
     CHOICE(MBZQ, pos, II);
     for (int i = 0; i < NHQ; i++) {
@@ -311,8 +305,8 @@ void BOUNDA(int t, int j, int pos) {
     for (int I1 = 0; I1 < 20; I1++) {
       double ZR0 = HR0 + ZBC[pos];
       LAQP(ZR0, CQ, WZ, WQ, NHQ);
-      W = FIL[pos] - CQ / HR0;
-      HR = W * W / 39.24;
+      W_temp = FIL[pos] - CQ / HR0;
+      HR = W_temp * W_temp / 39.24;
       if (std::abs(HR - HR0) <= 0.001)
         break;
       HR0 = HR;
@@ -321,7 +315,7 @@ void BOUNDA(int t, int j, int pos) {
     FLR(1) = CQ * CQ / HR;
     HB = (H[TIME_PREV][pos] + HR) / 2;
     FLR(3) = 4.905 * HB * HB;
-  } else if (KP == 1) {
+  } else if (KLAS[j][pos] == 1) {
     CHOICE(MBZ, pos, II);
     double HB1 = ZT[jt][II] + DZT[II] * t - ZBC[pos];
     double FIAL = QL[2][pos] + 6.264 * sqrt(H[TIME_PREV][pos]);
@@ -337,26 +331,24 @@ void BOUNDA(int t, int j, int pos) {
     FLR(0) = HB1 * URB;
     FLR(1) = FLR(0) * URB;
     FLR(3) = 4.905 * HB1 * HB1;
-  } else if (KP == 4) {
+  } else if (KLAS[j][pos] == 4) {
     FLR(0) = 0;
     FLR(1) = 0;
     FLR(2) = 0;
     FLR(3) = 4.905 * H[TIME_PREV][pos] * H[TIME_PREV][pos];
-  } else if (KP == 5) {
+  } else if (KLAS[j][pos] == 5) {
     QL[1][pos] = std::max(QL[1][pos], 0.0);
     FLR(0) = H[TIME_PREV][pos] * QL[1][pos];
     FLR(1) = FLR(0) * QL[1][pos];
     FLR(3) = 4.905 * H[TIME_PREV][pos] * H[TIME_PREV][pos];
-  } else if (KP == 6) {
-    double NC = NAC[j][pos];
-    double NE;
-    if (NC != 0) {
-      NE = std::fmin(pos, NC);
+  } else if (KLAS[j][pos] == 6) {
+    double NE = pos;
+    if (NAC[j][pos] != 0) {
+      NE = std::fmin(pos, NAC[j][pos]);
     }
     CHOICE(MBW, NE, II);
     double TOP = TOPW[II];
     if (Z[TIME_PREV][pos] < TOP || ZC[pos] < TOP) {
-      KP = 4;
       FLR(0) = 0;
       FLR(1) = 0;
       FLR(2) = 0;
@@ -400,11 +392,10 @@ void BOUNDA(int t, int j, int pos) {
     FLR(1) = FLR(0) * std::abs(UN);
     FLR(2) = FLR(0) * VT;
     FLR(3) = 4.905 * std::pow(TOP - ZBC[pos], 2);
-  } else if (KP == 7) {
+  } else if (KLAS[j][pos] == 7) {
     CHOICE(MDI, pos, II);
     double TOP = TOPD[II];
     if (Z[TIME_PREV][pos] > TOP || ZC[pos] > TOP) {
-      KP = 0;
       KLAS[j][pos] = 0;
       double CQ = QD(Z[TIME_PREV][pos], ZC[pos], TOP);
       double CB = BRDTH / SIDE[j][pos];
@@ -413,7 +404,6 @@ void BOUNDA(int t, int j, int pos) {
       FLR(3) = 4.905 * HB * HB;
       return;
     } else {
-      KP = 4;
       FLR(0) = 0;
       FLR(1) = 0;
       FLR(2) = 0;
@@ -427,6 +417,11 @@ void OSHER(int t, int pos) {
   FIR[pos] = QR[1][pos] - 2 * CR;
   double UA = (FIL[pos] + FIR[pos]) / 2;
   double CA = fabs((FIL[pos] - FIR[pos]) / 4);
+
+  FLR_OSHER[0][pos] = 0;
+  FLR_OSHER[1][pos] = 0;
+  FLR_OSHER[2][pos] = 0;
+  FLR_OSHER[3][pos] = 0;
 
   int K1, K2;
   if (QL[1][pos] < CL[pos] && QR[1][pos] >= -CR) {
@@ -762,7 +757,7 @@ void loadFromFilePNAC(const std::string p) {
   std::string line;
   std::getline(file, line);
   int NO;
-  NAC.resize(4, std::vector<double>(CEL));
+  NAC.resize(4, std::vector<int>(CEL));
   for (int i = 0; i < CEL; i++) {
     std::getline(file, line);
     std::istringstream iss(line);
@@ -780,7 +775,7 @@ void loadFromFilePNAP(const std::string p) {
   std::string line;
   std::getline(file, line);
   int NO;
-  NAP.resize(4, std::vector<double>(CEL));
+  NAP.resize(4, std::vector<int>(CEL));
   for (int i = 0; i < CEL; i++) {
     std::getline(file, line);
     std::istringstream iss(line);
@@ -833,9 +828,9 @@ void loadFromFileMBZ(const std::string p) {
   std::istringstream iss(line);
   iss >> NNZ0;
   int NO;
-  MBZ.resize(CEL, 0);
-  NNZ.resize(CEL, 0);
-  for (int i = 0; i < CEL; i++) {
+  MBZ.resize(NZ, 0);
+  NNZ.resize(NZ, 0);
+  for (int i = 0; i < NZ; i++) {
     std::getline(file, line);
     std::istringstream iss(line);
     iss >> NO;
@@ -853,9 +848,9 @@ void loadFromFileMBQ(const std::string p) {
   std::istringstream iss(line);
   iss >> NNQ0;
   int NO;
-  MBQ.resize(CEL, 0);
-  NNQ.resize(CEL, 0);
-  for (int i = 0; i < CEL; i++) {
+  MBQ.resize(NQ, 0);
+  NNQ.resize(NQ, 0);
+  for (int i = 0; i < NQ; i++) {
     std::getline(file, line);
     std::istringstream iss(line);
     iss >> NO;
@@ -871,9 +866,9 @@ void loadFromFilePXY(const std::string p) {
   std::string line;
   std::getline(file, line);
   int NO;
-  XP.resize(CEL, 0);
-  YP.resize(CEL, 0);
-  for (int i = 0; i < CEL; i++) {
+  XP.resize(NOD, 0);
+  YP.resize(NOD, 0);
+  for (int i = 0; i < NOD; i++) {
     std::getline(file, line);
     std::istringstream iss(line);
     iss >> NO;
@@ -893,7 +888,7 @@ void loadFromFileInitLevel(const std::string p) {
   for (int i = 0; i < CEL; i++) {
     std::getline(file, line);
     std::istringstream iss(line);
-    iss >> Z[0][i];
+    iss >> Z[1][i];
   }
   file.close();
 }
@@ -908,7 +903,7 @@ void loadFromFileU1(const std::string p) {
   for (int i = 0; i < CEL; i++) {
     std::getline(file, line);
     std::istringstream iss(line);
-    iss >> U[0][i];
+    iss >> U[1][i];
   }
   file.close();
 }
@@ -923,7 +918,7 @@ void loadFromFileV1(const std::string p) {
   for (int i = 0; i < CEL; i++) {
     std::getline(file, line);
     std::istringstream iss(line);
-    iss >> V[0][i];
+    iss >> V[1][i];
   }
   file.close();
 }
@@ -970,7 +965,6 @@ void pre2() {
 
   ZB1.resize(CEL, 0);
   NV.resize(CEL, 0);
-  NW.resize(CEL, 0);
   SIDE.resize(4, vector<double>(CEL));
   SINF.resize(4, vector<double>(CEL));
   COSF.resize(4, vector<double>(CEL));
@@ -988,25 +982,25 @@ void pre2() {
     for (int j = 0; j < NV[i]; j++) {
       NW[j] = NAP[j][i];
     }
-    double XP1 = XP[NW[0]];
-    double XP2 = XP[NW[1]];
-    double XP3 = XP[NW[2]];
-    double YP1 = YP[NW[0]];
-    double YP2 = YP[NW[1]];
-    double YP3 = YP[NW[2]];
+    double XP1 = XP[NW[0] - 1];
+    double XP2 = XP[NW[1] - 1];
+    double XP3 = XP[NW[2] - 1];
+    double YP1 = YP[NW[0] - 1];
+    double YP2 = YP[NW[1] - 1];
+    double YP3 = YP[NW[2] - 1];
     AREA[i] = (XP1 * YP2 - YP1 * XP2 - XP1 * YP3 + YP1 * XP3 + XP2 * YP3 -
                YP2 * XP3) /
               2.0;
     if (NV[i] == 4) {
-      double XP4 = XP[NW[3]];
-      double YP4 = YP[NW[3]];
-      AREA[i] = (XP1 * YP3 - YP1 * XP3 - XP1 * YP4 + YP1 * XP4 + XP3 * YP4 -
+      double XP4 = XP[NW[3] - 1];
+      double YP4 = YP[NW[3] - 1];
+      AREA[i] += (XP1 * YP3 - YP1 * XP3 - XP1 * YP4 + YP1 * XP4 + XP3 * YP4 -
                  YP3 * XP4) /
                 2.0;
     }
     for (int j = 0; j < NV[i]; j++) {
-      int N1 = NW[j];
-      int N2 = NW[(j + 1) % NV[i]];
+      int N1 = NW[j] - 1;
+      int N2 = NW[(j + 1) % NV[i]] - 1;
       double DX = XP[N1] - XP[N2];
       double DY = YP[N2] - YP[N1];
       SIDE[j][i] = std::sqrt(DX * DX + DY * DY);
@@ -1029,22 +1023,19 @@ void pre2() {
     if (NAP[0][i] == 0) {
       continue;
     }
-    if (Z[0][i] <= ZBC[i]) {
-      H[0][i] = HM1;
-      Z[0][i] = ZB1[i];
+    if (Z[1][i] <= ZBC[i]) {
+      H[1][i] = HM1;
+      Z[1][i] = ZB1[i];
     } else {
-      H[0][i] = Z[0][i] - ZBC[i];
+      H[1][i] = Z[1][i] - ZBC[i];
     }
   }
   for (int i = 0; i < CEL; i++) {
-    if (NAP[0][i] == 0) {
-      continue;
-    }
     FNC[i] = 9.81 * FNC0[i] * FNC0[i];
-    Z[1][i] = Z[0][i];
-    H[1][i] = H[0][i];
-    U[1][i] = U[0][i];
-    V[1][i] = V[0][i];
+    Z[0][i] = Z[1][i];
+    H[0][i] = H[1][i];
+    U[0][i] = U[1][i];
+    V[0][i] = V[1][i];
     for (int j = 0; j < NV[i]; j++) {
       SLCOS[j][i] = SIDE[j][i] * COSF[j][i];
       SLSIN[j][i] = SIDE[j][i] * SINF[j][i];
@@ -1077,7 +1068,7 @@ void take_boundary_for_two_d() {
       iss >> QZSTEMP1[i];
     }
     for (int i = 0; i < NDAYS; i++) {
-      STIME1 = STIME + (i - 1) / (24.0 * 3600.0 / MDT);
+      STIME1 = STIME + i / (24.0 * 3600.0 / MDT);
       for (int j = 0; j < NZ; j++) {
         if (NNZ[j] == k)
           ZT[j][i] = BOUNDRYinterp(STIME1, NZTEMP, QZSTIME1, QZSTEMP1);
@@ -1085,8 +1076,6 @@ void take_boundary_for_two_d() {
     }
   }
 
-  QZSTIME1.resize(NQTEMP, 0);
-  QZSTEMP1.resize(NQTEMP, 0);
   QT.resize(NQ, vector<double>(NDAYS));
   for (int k = 1; k <= NNQ0; k++) {
     std::stringstream ss;
@@ -1097,6 +1086,8 @@ void take_boundary_for_two_d() {
     ASSERT_READ(NQ_file)
     std::getline(NQ_file, current_line);
     NQTEMP = readFromLine<int>(current_line);
+    QZSTIME1.resize(NQTEMP, 0);
+    QZSTEMP1.resize(NQTEMP, 0);
     for (int i = 0; i < NQTEMP; i++) {
       std::getline(NQ_file, current_line);
       std::istringstream iss(current_line);
@@ -1104,7 +1095,7 @@ void take_boundary_for_two_d() {
       iss >> QZSTEMP2[i];
     }
     for (int i = 0; i < NDAYS; i++) {
-      STIME1 = STIME + (i - 1) / (24.0 * 3600.0 / MDT);
+      STIME1 = STIME + i / (24.0 * 3600.0 / MDT);
       for (int j = 0; j < NQ; j++) {
         if (NNQ[j] == k)
           QT[j][i] = BOUNDRYinterp(STIME1, NQTEMP, QZSTIME2, QZSTEMP2);
@@ -1114,23 +1105,27 @@ void take_boundary_for_two_d() {
 }
 
 double BOUNDRYinterp(double THOURS, int NZQSTEMP, Vec ZQSTIME, Vec ZQSTEMP) {
-  double ZQSTEMP1;
+  double result = 0;
   for (int i = 0; i < NZQSTEMP; i++) {
     if (THOURS >= ZQSTIME[i] && THOURS <= ZQSTIME[i + 1]) {
-      ZQSTEMP1 = ZQSTEMP[i] + (ZQSTEMP[i + 1] - ZQSTEMP[i]) /
+      result = ZQSTEMP[i] + (ZQSTEMP[i + 1] - ZQSTEMP[i]) /
                                   (ZQSTIME[i + 1] - ZQSTIME[i]) *
                                   (THOURS - ZQSTIME[i]);
     }
   }
-  return ZQSTEMP1;
+  return result;
 }
 
 // Kernel函数，具体可以放到其他核上跑
 // 0 <= pos <= CEL
 void time_step(int t, int pos) {
-  for(int k = 0; k < NV[pos]; k++){
-    if (NAC[k][pos] == 0 && KLAS[k][pos] != 0) calculate_FLUX(t, pos);
-    if (NAC[k][pos] != 0 && H[TIME_PREV][NAC[k][pos]] > HM1)calculate_FLUX(t, pos);
+  if (H[TIME_PREV][pos] <= HM1) {
+    for(int k = 0; k < NV[pos]; k++){
+      if (NAC[k][pos] == 0 && KLAS[k][pos] != 0) calculate_FLUX(t, pos);
+      if (NAC[k][pos] != 0 && H[TIME_PREV][NAC[k][pos]] > HM1) calculate_FLUX(t, pos);
+    }
+  } else {
+    calculate_FLUX(t, pos);
   }
   calculate_WHUV(t, pos);
   calculate_HUV(t, pos);
@@ -1182,9 +1177,9 @@ int main() {
       }
     }
 
-    for (kt = 1; kt <= 2000; kt++) {
+    for (kt = 1; kt <= K0; kt++) {
       // 可以考虑放到核上跑
-      for (int pos = 0; pos < 24000; pos++) {
+      for (int pos = 0; pos < CEL; pos++) {
         time_step(kt, pos);
       }
     }
