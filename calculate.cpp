@@ -1131,6 +1131,7 @@ void time_step(int t, int pos) {
   calculate_HUV(t, pos);
 }
 
+#include <omp.h>
 
 int main() {
   READ_DATA("TIME", MDT, NDAYS)
@@ -1159,6 +1160,9 @@ int main() {
   pre2();
   take_boundary_for_two_d();
 
+  double end_time;
+  double start_time;
+  omp_set_num_threads(16);
   // 必须串行执行的部分：
   // K0 = 2000
   double K0 = (double) MDT / DT;
@@ -1177,14 +1181,16 @@ int main() {
       }
     }
 
+    start_time = omp_get_wtime();
     for (kt = 1; kt <= K0; kt++) {
       // 可以考虑放到核上跑
+      #pragma omp parallel for
       for (int pos = 0; pos < CEL; pos++) {
         time_step(kt, pos);
       }
     }
-
-    cout << jt << endl;
+    end_time = omp_get_wtime();
+    cout << end_time - start_time << " seconds" << endl;
   }
   return 0;
 }
