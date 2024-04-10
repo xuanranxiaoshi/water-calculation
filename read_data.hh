@@ -10,7 +10,7 @@ static std::string current_path;
 
 #define TIME_NOW (t % 2)
 #define TIME_PREV ((t - 1) % 2)
-#define FLR(x) FLUX[x][j][pos]
+#define FLR(x) FLUX[x][j]
 #define FLUX_VAL(A, B, C, D)                                                   \
   FLR(0) = A;                                                                  \
   FLR(1) = B;                                                                  \
