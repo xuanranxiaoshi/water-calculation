@@ -5,22 +5,22 @@ C#################################################################
         INCLUDE 'PAR.INC'     
         INCLUDE 'BASE.INC' 
 
-       OPEN(600,FILE='..//TIME.DAT')
+       OPEN(600,FILE='../TIME.DAT')
        READ(600,*) MDT
        READ(600,*) NDAYS
        CLOSE(600)
  
-       OPEN(600,FILE='..//GIRD.DAT')
+       OPEN(600,FILE='../GIRD.DAT')
        READ(600,*) NOD
        READ(600,*) CEL
        CLOSE(600)      
         
-       OPEN(600,FILE='..//DEPTH.DAT')
+       OPEN(600,FILE='../DEPTH.DAT')
        READ(600,*) HM1
        READ(600,*) HM2
        CLOSE(600)        
         
-       OPEN(600,FILE='..//BOUNDARY.DAT')
+       OPEN(600,FILE='../BOUNDARY.DAT')
        READ(600,*) NZ
        READ(600,*) NQ
        READ(600,*) NZQ
@@ -29,14 +29,14 @@ C#################################################################
        READ(600,*) NDI                     
        CLOSE(600)        
 
-        OPEN(800,FILE='..//CALTIME.DAT')
+        OPEN(800,FILE='../CALTIME.DAT')
         READ(800,*)         
         READ(800,*) DT
         CLOSE(800)
         STIME=0.0
         JTN=NDAYS
         
-        OPEN(700,FILE='..//MODEL.DAT')
+        OPEN(700,FILE='../MODEL.DAT')
         READ(700,*)   
         READ(700,*) NZQM        
         READ(700,*) NWQ
@@ -52,12 +52,12 @@ C#################################################################
         CALL Take_Boundary_for_TwoD                 !����߽�����
 
 	  IF (ICON.EQ.0) THEN                            !�����ͬ�������
-        OPEN(20,FILE='..//OUTPUT//ZUV.OUT')
-        OPEN(24,FILE='..//OUTPUT//SHA.OUT')
-        OPEN(28,FILE='..//OUTPUT//H2U2V2.OUT')
+        OPEN(20,FILE='../OUTPUT/ZUV.OUT')
+        OPEN(24,FILE='../OUTPUT/SHA.OUT')
+        OPEN(28,FILE='../OUTPUT/H2U2V2.OUT')
         END IF
-        OPEN(901,FILE='..//OUTPUT//XY-TEC.DAT')       !���tecplot
-        OPEN(902,FILE='..//OUTPUT//SHA-TEC.DAT')       !���tecplot
+        OPEN(901,FILE='../OUTPUT/XY-TEC.DAT')       !���tecplot
+        OPEN(902,FILE='../OUTPUT/SHA-TEC.DAT')       !���tecplot
         CALL OUTPUT2
         
         DO 900 JT=JT0,JTN     
@@ -118,12 +118,12 @@ C#####################################################################
         DATA  AMU/1.02E-06/
         DATA DB/0.018E-03,0.06E-03/
         
-        OPEN(12,FILE='..//SOURCES//PNAC.DAT')
-        OPEN(13,FILE='..//SOURCES//PNAP.DAT')
-        OPEN(14,FILE='..//SOURCES//PKLAS.DAT')
-        OPEN(15,FILE='..//SOURCES//PZBC.DAT')
-        OPEN(16,FILE='..//SOURCES//MBZ.DAT')
-        OPEN(17,FILE='..//SOURCES//MBQ.DAT')
+        OPEN(12,FILE='../SOURCES/PNAC.DAT')
+        OPEN(13,FILE='../SOURCES/PNAP.DAT')
+        OPEN(14,FILE='../SOURCES/PKLAS.DAT')
+        OPEN(15,FILE='../SOURCES/PZBC.DAT')
+        OPEN(16,FILE='../SOURCES/MBZ.DAT')
+        OPEN(17,FILE='../SOURCES/MBQ.DAT')
         
         READ(12,*)
         DO I=1,CEL
@@ -187,7 +187,7 @@ C#####################################################################
         CLOSE(16)
         CLOSE(17)
 ***********************************��������꣬��ȡ��Сֵ
-        OPEN(1,FILE='..//SOURCES//PXY.DAT')
+        OPEN(1,FILE='../SOURCES/PXY.DAT')
         READ(1,*)           
         DO I=1,NOD
          READ(1,*) NO,XP(I),YP(I)  
@@ -208,7 +208,7 @@ C#####################################################################
         END DO        
 ***********************************��������꣬��ȡ��Сֵ����ת��               
 ******************************************************   ��ʼˮλ    
-        OPEN(801,FILE='..//INITIALLEVEL.DAT')        
+        OPEN(801,FILE='../INITIALLEVEL.DAT')        
         READ(801,*)
         DO I=1,CEL
         READ(801,*) Z1(I)
@@ -216,7 +216,7 @@ C#####################################################################
         CLOSE(801)    
 ******************************************************   ��ʼˮλ�޸� 
 ******************************************************   ��ʼ����u�޸�    
-        OPEN(802,FILE='..//INITIALU1.DAT')        
+        OPEN(802,FILE='../INITIALU1.DAT')        
         READ(802,*)
         DO I=1,CEL
         READ(802,*) U1(I)
@@ -224,7 +224,7 @@ C#####################################################################
         CLOSE(802)    
 ******************************************************   ��ʼ����u�޸� 
 ******************************************************   ��ʼ����v�޸�    
-        OPEN(803,FILE='..//INITIALV1.DAT')        
+        OPEN(803,FILE='../INITIALV1.DAT')        
         READ(803,*)
         DO I=1,CEL
         READ(803,*) V1(I)
@@ -232,7 +232,7 @@ C#####################################################################
         CLOSE(803)    
 ******************************************************   ��ʼ����v�޸�         
 ******************************************************   �����޸�     
-        OPEN(804,FILE='..//CV.DAT')
+        OPEN(804,FILE='../CV.DAT')
         READ(804,*)        
         DO I=1,CEL
         READ(804,*) FNC0(I)
@@ -337,7 +337,7 @@ C#################################################################ˮλ�߽�
         DO K=1,NNZ0
 !            WRITE(*,*) NNZ0
           write(unit=pointname,fmt="(i4.4)") K            
-	    OPEN(2,FILE='..//BOUNDE//NZ//'//'NZ'//trim(pointname)
+	    OPEN(2,FILE='../BOUNDE/NZ/'//'NZ'//trim(pointname)
      1//'.dat')            
             READ(2,*)NZTEMP            
             DO I=1,NZTEMP
@@ -360,7 +360,7 @@ C#################################################################ˮλ�߽�
 C#################################################################�����߽� 
         DO K=1,NNQ0
           write(unit=pointname,fmt="(i4.4)") K            
-	    OPEN(2,FILE='..//BOUNDE//NQ//'//'NQ'//trim(pointname)
+	    OPEN(2,FILE='../BOUNDE/NQ/'//'NQ'//trim(pointname)
      1//'.dat')            
             READ(2,*)NQTEMP            
             DO I=1,NQTEMP
