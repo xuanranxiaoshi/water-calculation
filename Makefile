@@ -11,7 +11,7 @@ else
 	CXX = /opt/intel/oneapi/compiler/latest/bin/icpx
 	COMPILER_MESSAGE = Using Intel C++ Compiler as Compiler
 	CXXFLAGS = -O3 -qopenmp -x HOST
-	SETVAR_COMMAND = /opt/intel/oneapi/setvars.sh
+	SETVAR_COMMAND = sudo source /opt/intel/oneapi/setvars.sh
 endif
 
 EXECUTABLE = calculate
