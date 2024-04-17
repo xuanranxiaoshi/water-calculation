@@ -1,10 +1,11 @@
 #include "read_data.hh"
 #include "common.hh"
 #include "calculate.hh"
+#include "calculate.cuh" // __device__ function 声明
 
 using namespace DataManager;
 
-void calculate_FLUX(int t, int pos, Vec2 &FLUX) {
+__device__ __forceinline__ void calculate_FLUX(int t, int pos, double (&FLUX)[4][4]) {
   Vec QL(3);
   Vec QR(3);
   QL[0] = H[TIME_PREV][pos];
@@ -89,8 +90,11 @@ void calculate_FLUX(int t, int pos, Vec2 &FLUX) {
   }
 }
 
-void calculate_WHUV(int t, int pos, double &WH, double &WU, double &WV) {
-  Vec2 FLUX(4, Vec(4));
+__device__ __forceinline__ void calculate_WHUV
+(int t, int pos, double &WH, double &WU, double &WV,// 原参数
+double** SIDE, double** SLCOS, double** SLSIN) {
+  // Vec2 FLUX(4, Vec(4));
+  double FLUX[4][4];// 在kernel中不能使用vector
   calculate_FLUX(t, pos, FLUX);
 
   for (int j = 0; j < 4; j++) {
@@ -105,13 +109,22 @@ void calculate_WHUV(int t, int pos, double &WH, double &WU, double &WV) {
   }
 }
 
-void calculate_HUV(int t, int pos) {
+__device__ __forceinline__ void calculate_HUV
+(int t, int pos,// 原参数
+const double HM1, const double HM2, const int DT, const double QLUA, const double VMIN,
+double* H_pre, double* U_pre, double* V_pre, int* NV, double* AREA, double* ZBC, double* FNC,
+double** SIDE, double** SLCOS, double** SLSIN,
+double* H_res, double* U_res, double* V_res, double* Z_res, double* W_res) {
   double SIDEX, SIDES, HSIDE, DT2, DTA, WDTA, QX1, QY1, DTAU, DTAV, WSF;
-  double H1 = H[TIME_PREV][pos];
-  double U1 = U[TIME_PREV][pos];
-  double V1 = V[TIME_PREV][pos];
+  // double H1 = H[TIME_PREV][pos];
+  // double U1 = U[TIME_PREV][pos];
+  // double V1 = V[TIME_PREV][pos];
+  double H1 = H_pre[pos];
+  double U1 = U_pre[pos];
+  double V1 = V_pre[pos];
+
   double WH = 0.0, WU = 0.0, WV = 0.0;
-  calculate_WHUV(t, pos, WH, WU, WV);
+  calculate_WHUV(t, pos, WH, WU, WV, SIDE, SLCOS, SLSIN);
 
   if (NV[pos] == 4) {
     SIDEX = std::min(0.5 * (SIDE[0][pos] + SIDE[2][pos]),
@@ -130,7 +143,8 @@ void calculate_HUV(int t, int pos) {
 
   double H2, U2, V2, Z2, W2;
   H2 = std::max(H1 - WDTA * WH + QLUA, HM1);
-  Z2 = H[TIME_NOW][pos] + ZBC[pos];
+  // Z2 = H[TIME_NOW][pos] + ZBC[pos];
+  Z2 = H2 + ZBC[pos];//可能是个读旧值的bug？暂时改成了读新值，存疑
   if (H2 <= HM1) {
     U2 = 0.0;
     V2 = 0.0;
@@ -151,11 +165,16 @@ void calculate_HUV(int t, int pos) {
     }
   }
   W2 = std::sqrt(U2 * U2 + V2 * V2);
-  H[TIME_NOW][pos] = H2;
-  U[TIME_NOW][pos] = U2;
-  V[TIME_NOW][pos] = V2;
-  Z[TIME_NOW][pos] = Z2;
-  W[TIME_NOW][pos] = W2;
+  // H[TIME_NOW][pos] = H2;
+  // U[TIME_NOW][pos] = U2;
+  // V[TIME_NOW][pos] = V2;
+  // Z[TIME_NOW][pos] = Z2;
+  // W[TIME_NOW][pos] = W2;
+  H_res[pos] = H2;
+  U_res[pos] = U2;
+  V_res[pos] = V2;
+  Z_res[pos] = Z2;
+  W_res[pos] = W2;
 }
 
 void BOUNDA(int t, int j, int pos, Vec2 &FLUX, Vec &QL, Vec &QR, double &FIL,
@@ -663,26 +682,31 @@ int main() {
 }
 
 
-__global__ void translate_step(const int CEL, const int DT, const int jt, const int NHQ, const double HM1, const double HM2,
-      double* H_pre, double* U_pre, double* V_pre, double* Z_pre, double* W_pre,
-      int* NV, double* AREA, double* ZBC, double* ZB1, double* DQT, double* DZT, double* TOPW, double* TOPD, double* MBQ, double* MBZQ, double* MBW, double* MDI,
-      double* d_QT, double* d_ZT,
-      double** SIDE, double** SLCOS, double** SLSIN, double** KLAS, double** NAC, double** ZW, double** QW,
-      double* H_res, double* U_res, double* V_res, double* Z_res, double* W_res){
-        
+__global__ void translate_step(int t, const int CEL, const int DT, const int jt, const int NHQ, const double HM1, const double HM2, const double QLUA, const double VMIN,
+  double* H_pre, double* U_pre, double* V_pre, double* Z_pre, double* W_pre,
+  int* NV, double* AREA, double* ZBC, double* ZB1, double* DQT, double* DZT, double* TOPW, double* TOPD, double* MBQ, double* MBZQ, double* MBW, double* MDI, double* FNC,
+  double* d_QT, double* d_ZT,
+  double** SIDE, double** SLCOS, double** SLSIN, double** KLAS, double** NAC, double** ZW, double** QW,
+  double* H_res, double* U_res, double* V_res, double* Z_res, double* W_res){
+    
+  int pos = threadIdx.x+blockDim.x*blockIdx.x;// 线程pos计算HUVWZ[pos]位置的格子
+  // calculate_HUV
+  calculate_HUV(
+    t, pos,
+    HM1, HM2, DT, QLUA, VMIN,
+    H_pre, U_pre, V_pre, NV, AREA, ZBC, FNC,
+    SIDE, SLCOS, SLSIN,
+    H_res, U_res, V_res, Z_res, W_res);
 
-      // calculate_HUV
+  // calculate_WHUV
 
 
-      // calculate_WHUV
+  // calculate_FLUX
 
 
-      // calculate_FLUX: 
+  // BOUNDA
 
 
-      // BOUNDA
+  // OSHER
 
-
-      // OSHER
-
-      }
+  }
