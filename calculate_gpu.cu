@@ -609,7 +609,7 @@ void closeFile(){
 }
 
 int main() {
-  // 数据初始化
+  //1. 数据初始化
   READ_DATA("TIME", MDT, NDAYS)
   READ_DATA("GIRD", NOD, CEL)
   READ_DATA("DEPTH", HM1, HM2)
@@ -628,15 +628,11 @@ int main() {
 
   double end_time;
   double start_time;
-  omp_set_num_threads(1);
-  // 必须串行执行的部分：
-  // K0 = 2000
   int K0 = MDT / DT;
   int pos;
 
   for (jt = 0; jt < 100; jt++) {
-    // 由于需要区分天数和小时数，故每一天都至少需要做一次同步。
-    // TODO: 补充边界插值
+
     for (int l = 0; l < NZ; l++) {
       if (jt != NDAYS) {
         DZT[l] = (ZT[jt + 1][l] - ZT[jt][l]) / K0;
@@ -651,11 +647,12 @@ int main() {
 
     start_time = omp_get_wtime();
     for (kt = 1; kt <= K0; kt++) {
-      // 可以考虑放到核上跑
-      #pragma omp parallel for
-      for (pos = 0; pos < CEL; pos++) {
-        time_step(kt, pos);
-      }
+
+      // for (pos = 0; pos < CEL; pos++) {
+      //   time_step(kt, pos);
+      // }
+      // todo: 调用 kernel 函数
+
     }
     end_time = omp_get_wtime();
     cout << end_time - start_time << " seconds" << endl;
@@ -670,7 +667,8 @@ __global__ void translate_step(const int CEL, const int DT, const int jt, const 
       double* H_pre, double* U_pre, double* V_pre, double* Z_pre, double* W_pre,
       int* NV, double* AREA, double* ZBC, double* ZB1, double* DQT, double* DZT, double* TOPW, double* TOPD, double* MBQ, double* MBZQ, double* MBW, double* MDI,
       double* d_QT, double* d_ZT,
-      double** SIDE, double** SLCOS, double** SLSIN, double** KLAS, double** NAC, double** ZW, double** QW){
+      double** SIDE, double** SLCOS, double** SLSIN, double** KLAS, double** NAC, double** ZW, double** QW,
+      double* H_res, double* U_res, double* V_res, double* Z_res, double* W_res){
         
 
       // calculate_HUV
