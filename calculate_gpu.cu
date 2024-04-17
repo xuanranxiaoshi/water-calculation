@@ -670,4 +670,21 @@ __global__ void translate_step(const int CEL, const int DT, const int jt, const 
       double* H_pre, double* U_pre, double* V_pre, double* Z_pre, double* W_pre,
       int* NV, double* AREA, double* ZBC, double* ZB1, double* DQT, double* DZT, double* TOPW, double* TOPD, double* MBQ, double* MBZQ, double* MBW, double* MDI,
       double* d_QT, double* d_ZT,
-      double** SIDE, double** SLCOS, double** SLSIN, double** KLAS, double** NAC, double** ZW, double** QW)
+      double** SIDE, double** SLCOS, double** SLSIN, double** KLAS, double** NAC, double** ZW, double** QW){
+        
+
+      // calculate_HUV
+
+
+      // calculate_WHUV
+
+
+      // calculate_FLUX: 
+
+
+      // BOUNDA
+
+
+      // OSHER
+
+      }
