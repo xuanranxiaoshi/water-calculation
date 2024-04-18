@@ -1,5 +1,5 @@
 #include "read_data.hh"
-#include "calculate_gpu.cuh" // calculate.hh中所有函数都被改造成__device__,声明全部移到此处
+#include "calculate.cuh" // calculate.hh中所有函数都被改造成__device__,声明全部移到此处
 
 // using namespace DataManager;
 
@@ -43,10 +43,10 @@ double** KLAS, double** QT, double** SIDE, double** ZW, double** QW, double** ZT
     double SINJ = SINF[j][pos];
     QL[1] = U1 * COSJ + V1 * SINJ;
     QL[2] = V1 * COSJ - U1 * SINJ;
-    double CL = std::sqrt(9.81 * H1);
+    double CL = sqrt(9.81 * H1);
     double FIL = QL[1] + 2 * CL;
     double HC, BC, ZC, UC, VC;
-    double ZI = std::fmax(Z1, v_ZB1);
+    double ZI = fmax(Z1, v_ZB1);
 
     if (NC == 0) {
       HC = 0;
@@ -55,9 +55,9 @@ double** KLAS, double** QT, double** SIDE, double** ZW, double** QW, double** ZT
       UC = 0;
       VC = 0;
     } else {
-      HC = std::fmax(H_pre[NC], HM1);
+      HC = fmax(H_pre[NC], HM1);
       BC = ZBC[NC];
-      ZC = std::fmax(ZBC[NC], Z_pre[NC]);
+      ZC = fmax(ZBC[NC], Z_pre[NC]);
       UC = U_pre[NC];
       VC = V_pre[NC];
     }
@@ -78,8 +78,8 @@ double** KLAS, double** QT, double** SIDE, double** ZW, double** QW, double** ZT
                0);
     } else if (H1 <= HM2) {
       if (ZC > ZI) {
-        double DH = std::fmax(ZC - ZBC[pos], HM1);
-        double UN = -C1 * std::sqrt(DH);
+        double DH = fmax(ZC - ZBC[pos], HM1);
+        double UN = -C1 * sqrt(DH);
         FLUX_VAL(DH * UN, FLR(0) * UN,
                  FLR(0) * (VC * COSJ - UC * SINJ),
                  4.905 * H1 * H1);
@@ -89,8 +89,8 @@ double** KLAS, double** QT, double** SIDE, double** ZW, double** QW, double** ZT
       }
     } else if (HC <= HM2) {
       if (ZI > ZC) {
-        double DH = std::fmax(ZI - BC, HM1);
-        double UN = C1 * std::sqrt(DH);
+        double DH = fmax(ZI - BC, HM1);
+        double UN = C1 * sqrt(DH);
         double HC1 = ZC - ZBC[pos];
         FLUX_VAL(DH * UN, FLR(0) * UN, FLR(0) * QL[2], 4.905 * HC1 * HC1);
       } else {
@@ -99,11 +99,11 @@ double** KLAS, double** QT, double** SIDE, double** ZW, double** QW, double** ZT
                  4.905 * H1 * H1);
       }
     } else {
-      QR[0] = std::fmax(ZC - ZBC[pos], HM1);
+      QR[0] = fmax(ZC - ZBC[pos], HM1);
       double UR = UC * COSJ + VC * SINJ;
       QR[1] = UR * min(HC / QR[0], 1.5);
       if (HC <= HM2 || QR[0] <= HM2) {
-        QR[1] = std::copysign(VMIN, UR);
+        QR[1] = copysign(VMIN, UR);
       }
       QR[2] = VC * COSJ - UC * SINJ;
       OSHER(t, pos, QL, QR, FIL, FLR_OSHER, H_pre);
@@ -166,12 +166,13 @@ double* H_res, double* U_res, double* V_res, double* Z_res, double* W_res) {
                      0.5 * (SIDE[1][pos] + SIDE[3][pos]));
   } else {
     SIDES = 0.5 * (SIDE[0][pos] + SIDE[1][pos] + SIDE[2][pos]);
-    SIDEX = std::sqrt((SIDES - SIDE[0][pos]) * (SIDES - SIDE[1][pos]) *
+    SIDEX = sqrt((SIDES - SIDE[0][pos]) * (SIDES - SIDE[1][pos]) *
                       (SIDES - SIDE[2][pos]) / SIDES);
   }
   HSIDE = max(H1, HM1);
-  DT2 = SIDEX / (U1 + std::sqrt(9.81 * HSIDE));
-  DT2 = std::fmin(DT, DT2);
+  DT2 = SIDEX / (U1 + sqrt(9.81 * HSIDE));
+  // DT2 = std::fmin(DT, DT2);
+  DT2 = fmin((double)DT, DT2);
   DT2 = max(DT2, DT / 10.0);
   DTA = 1.0 * DT2 / (1.0 * AREA[pos]);
   WDTA = 1.00 * DTA;
@@ -185,21 +186,21 @@ double* H_res, double* U_res, double* V_res, double* Z_res, double* W_res) {
     V2 = 0.0;
   } else {
     if (H2 <= HM2) {
-      U2 = std::copysign( min(VMIN, std::abs(U1)), U1);
-      V2 = std::copysign( min(VMIN, std::abs(V1)), V1);
+      U2 = copysign( min(VMIN, fabs(U1)), U1);
+      V2 = copysign( min(VMIN, fabs(V1)), V1);
     } else {
       QX1 = H1 * U1;
       QY1 = H1 * V1;
       DTAU = WDTA * WU;
       DTAV = WDTA * WV;
-      WSF = FNC[pos] * std::sqrt(U1 * U1 + V1 * V1) / std::pow(H1, 0.33333);
+      WSF = FNC[pos] * sqrt(U1 * U1 + V1 * V1) / pow(H1, 0.33333);
       U2 = (QX1 - DTAU - DT * WSF * U1) / H2;
       V2 = (QY1 - DTAV - DT * WSF * V1) / H2;
-      U2 = std::copysign( min(std::abs(U2), 5.0), U2);
-      V2 = std::copysign( min(std::abs(V2), 5.0), V2);
+      U2 = copysign( min(fabs(U2), 5.0), U2);
+      V2 = copysign( min(fabs(V2), 5.0), V2);
     }
   }
-  W2 = std::sqrt(U2 * U2 + V2 * V2);
+  W2 = sqrt(U2 * U2 + V2 * V2);
   // H[TIME_NOW][pos] = H2;
   // U[TIME_NOW][pos] = U2;
   // V[TIME_NOW][pos] = V2;
@@ -227,7 +228,7 @@ double** KLAS, double** QT, double** SIDE, double** ZW, double** QW, double** ZT
   double S0 = 0.0002;
   double DX2 = 5000.0;
   double BRDTH = 100.0;
-  double CL = std::sqrt(9.81 * H_pre[pos]);
+  double CL = sqrt(9.81 * H_pre[pos]);
 
   if (QL[1] > CL) {
     FLUX_VAL(H_pre[pos] * QL[1], FLR(0) * QL[1],
@@ -247,7 +248,7 @@ double** KLAS, double** QT, double** SIDE, double** ZW, double** QW, double** ZT
     for (int K = 1; K <= 20; K++) {
       double W_temp = FIL - FLR(0) / HB0;
       HB = W_temp * W_temp / 39.24;
-      if (std::abs(HB0 - HB) <= 0.005)
+      if (fabs(HB0 - HB) <= 0.005)
         break;
       HB0 = HB0 * 0.5 + HB * 0.5;
     }
@@ -273,7 +274,7 @@ double** KLAS, double** QT, double** SIDE, double** ZW, double** QW, double** ZT
       LAQP(ZR0, CQ, WZ, WQ, NHQ);
       W_temp = FIL - CQ / HR0;
       HR = W_temp * W_temp / 39.24;
-      if (std::abs(HR - HR0) <= 0.001)
+      if (fabs(HR - HR0) <= 0.001)
         break;
       HR0 = HR;
     }
@@ -290,7 +291,7 @@ double** KLAS, double** QT, double** SIDE, double** ZW, double** QW, double** ZT
     for (int IURB = 1; IURB <= 30; IURB++) {
       double FIAR = URB - 6.264 * sqrt(HB1);
       URB = (FIAL + FIAR) * (FIAL - FIAR) * (FIAL - FIAR) / HB1 / 313.92;
-      if (std::abs(URB - UR0) <= 0.0001)
+      if (fabs(URB - UR0) <= 0.0001)
         break;
       UR0 = URB;
     }
@@ -310,7 +311,8 @@ double** KLAS, double** QT, double** SIDE, double** ZW, double** QW, double** ZT
   } else if (KLAS[j][pos] == 6) {
     double NE = pos;
     if (NAC[j][pos] != 0) {
-      NE = std::fmin(pos, NAC[j][pos]);
+      // NE = std::fmin(pos, NAC[j][pos]);
+      NE = fmin((double)pos, NAC[j][pos]);
     }
     int pos_near = find_in_vec(MBW, MBW_LEN, pos);
     double TOP = TOPW[pos_near];
@@ -321,21 +323,21 @@ double** KLAS, double** QT, double** SIDE, double** ZW, double** QW, double** ZT
       FLR(3) = 4.905 * H_pre[pos] * H_pre[pos];
     }
     if (Z_pre[pos] > TOP && ZC < TOP) {
-      FLR(0) = C0 * std::pow(Z_pre[pos] - TOP, 1.5);
+      FLR(0) = C0 * pow(Z_pre[pos] - TOP, 1.5);
       FLR(1) = FLR(0) * QL[1];
       FLR(2) = FLR(0) * QL[2];
-      FLR(3) = 4.905 * std::pow(TOP - ZBC[pos], 2);
+      FLR(3) = 4.905 * pow(TOP - ZBC[pos], 2);
       return;
     }
     if (Z_pre[pos] < TOP && ZC > TOP) {
-      FLR(0) = -C0 * std::pow(ZC - TOP, 1.5);
+      FLR(0) = -C0 * pow(ZC - TOP, 1.5);
       FLR(1) = FLR(0) *
                min(UC * COSF[j][pos] + VC * SINF[j][pos], 0.0);
       FLR(2) = FLR(0) * (VC * COSF[j][pos] - UC * SINF[j][pos]);
-      FLR(3) = 4.905 * std::pow(Z_pre[pos] - ZBC[pos], 2);
+      FLR(3) = 4.905 * pow(Z_pre[pos] - ZBC[pos], 2);
       return;
     }
-    double DZ = std::abs(Z_pre[pos] - ZC);
+    double DZ = fabs(Z_pre[pos] - ZC);
     double HD;
     double UN;
     double VT;
@@ -349,15 +351,15 @@ double** KLAS, double** QT, double** SIDE, double** ZW, double** QW, double** ZT
       VT = QL[2];
     }
     double SH = HD + DZ;
-    double CE = min(1.0, 1.05 * std::pow(DZ / SH, 0.33333));
+    double CE = min(1.0, 1.05 * pow(DZ / SH, 0.33333));
     if (Z_pre[pos] < ZC && UN > 0.0) {
       UN = 0.0;
     }
     FLR(0) =
-        std::copysign(CE * C1 * std::pow(SH, 1.5), Z_pre[pos] - ZC);
-    FLR(1) = FLR(0) * std::abs(UN);
+        copysign(CE * C1 * pow(SH, 1.5), Z_pre[pos] - ZC);
+    FLR(1) = FLR(0) * fabs(UN);
     FLR(2) = FLR(0) * VT;
-    FLR(3) = 4.905 * std::pow(TOP - ZBC[pos], 2);
+    FLR(3) = 4.905 * pow(TOP - ZBC[pos], 2);
   } else if (KLAS[j][pos] == 7) {
     int pos_near = find_in_vec(MDI, MDI_LEN, pos);
     double TOP = TOPD[pos_near];
@@ -366,7 +368,7 @@ double** KLAS, double** QT, double** SIDE, double** ZW, double** QW, double** ZT
       double CQ = QD(Z_pre[pos], ZC, TOP);
       double CB = BRDTH / SIDE[j][pos];
       FLR(0) = CQ * CB;
-      FLR(1) = CB * std::copysign(CQ * CQ / HB, CQ);
+      FLR(1) = CB * copysign(CQ * CQ / HB, CQ);
       FLR(3) = 4.905 * HB * HB;
       return;
     } else {
@@ -385,7 +387,7 @@ double* H_pre) {
   double FIR = QR[1] - 2 * CR;
   double UA = (FIL + FIR) / 2;
   double CA = fabs((FIL - FIR) / 4);
-  double CL = std::sqrt(9.81 * H_pre[pos]);
+  double CL = sqrt(9.81 * H_pre[pos]);
 
   FLR_OSHER[0] = 0;
   FLR_OSHER[1] = 0;
@@ -584,8 +586,11 @@ __device__ __forceinline__ void QF(double h, double u, double v, double (&F)[4])
 
 // Problem 2:由于__device__中不能使用vector，使用数组则需要传入长度参数，该参数需要从__global__传入
 __device__ __forceinline__ int find_in_vec(double* list, int list_length, double target){
-   double* ptr = std::find(list, list+list_length, target);
-   return ptr-list;
+  int index = 0;
+  for(; index < list_length; ++index)
+    if(list[index] == target)
+      break;
+  return index;
 }
 
 __device__ __forceinline__ void LAQP(double X, double &Y, double (&A)[5], double (&B)[5], double MS) {
@@ -608,7 +613,7 @@ __device__ __forceinline__ void LAQP(double X, double &Y, double (&A)[5], double
     double X1 = A[i + 1];
     double X2 = A[i + 2];
 
-    if (std::abs(X0 - X1) < 0.01 || std::abs(X1 - X2) < 0.01) {
+    if (fabs(X0 - X1) < 0.01 || fabs(X1 - X2) < 0.01) {
       Y = B[i + 1];
     } else {
       double U_ = (X - X1) * (X - X2) / (X0 - X1) / (X0 - X2);
@@ -627,7 +632,7 @@ __device__ __forceinline__ void LAQP(double X, double &Y, double (&A)[5], double
     double X1 = A[i + 1];
     double X2 = A[i + 2];
 
-    if (std::abs(X0 - X1) < 0.01 || std::abs(X1 - X2) < 0.01) {
+    if (fabs(X0 - X1) < 0.01 || fabs(X1 - X2) < 0.01) {
       Y = B[i + 1];
     } else {
       double U_ = (X - X1) * (X - X2) / (X0 - X1) / (X0 - X2);
@@ -652,13 +657,13 @@ __device__ __forceinline__ double QD(double ZL, double ZR, double ZB) {
   double QD;
 
   if (DELTA <= SIGMA) {
-    QD = std::copysign(CM * std::pow(H0, 1.5), ZL - ZR);
+    QD = copysign(CM * pow(H0, 1.5), ZL - ZR);
   } else {
     double DH = ZU - ZD;
     if (DH > 0.09) {
-      QD = std::copysign(FI * HS * std::sqrt(DH), ZL - ZR);
+      QD = copysign(FI * HS * sqrt(DH), ZL - ZR);
     } else {
-      QD = std::copysign(FI * HS * 0.3 * DH / 0.1, ZL - ZR);
+      QD = copysign(FI * HS * 0.3 * DH / 0.1, ZL - ZR);
     }
   }
 

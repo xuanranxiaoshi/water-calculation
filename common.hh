@@ -2,14 +2,13 @@
 
 #include <vector>
 #include <algorithm>
-#include <cmath>
 #include <cstdlib>
+#include <cmath>
 #include <fstream>
 #include <iostream>
 #include <iterator>
 #include <sstream>
 #include <iomanip>
-#include <math.h>
 
 using std::string;
 using std::vector;
