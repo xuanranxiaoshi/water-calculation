@@ -13,13 +13,13 @@ using namespace DataManager;
 // device 变量
 int* NV_dev;
 double* H_dev, *U_dev, *V_dev, *Z_dev, *W_dev, *QT_dev, *ZT_dev;
-double* AREA_dev, *ZBC_dev, *ZB1_dev, *DQT_dev,  *DZT_dev,  *TOPW_dev,  *TOPD_dev,  *MBQ_dev,  *MBZQ_dev,  *MBW_dev,  *MDI_dev;
+double* AREA_dev, *ZBC_dev, *ZB1_dev, *DQT_dev,  *DZT_dev,  *TOPW_dev,  *TOPD_dev,  *MBQ_dev,  *MBZQ_dev,  *MBW_dev,  *MDI_dev, *FNC_dev, *MBZ_dev;
 double* H_res, *U_res, *V_res, *Z_res, *W_res;
 
 // 二维矩阵的索引指针
 int **NAC_hIdx, **NAC_devIdx;
 double** SIDE_hIdx, **SLCOS_hIdx, **SLSIN_hIdx, **KLAS_hIdx, **ZW_hIdx, **QW_hIdx;
-double** SIDE_devIdx, **SLCOS_devIdx, **SLSIN_devIdx, **KLAS_devIdx, **ZW_devIdx, **QW_devIdx;
+double** SIDE_devIdx, **SLCOS_devIdx, **SLSIN_devIdx, **KLAS_devIdx, **ZW_devIdx, **QW_devIdx, **QT_devIdx, **ZT_devIdx, **COSF_devIdx, **SINF_devIdx;
 
 // 二维矩阵的实际数据指针
 int *NAC_dev;
@@ -64,6 +64,9 @@ void initialize_deviceVar(){
   cudaMemcpy(AREA_dev, &AREA[0], sizeof(double)* CEL, cudaMemcpyHostToDevice);
   cudaMemcpy(ZB1_dev, &ZB1[0], sizeof(double)* CEL,  cudaMemcpyHostToDevice);
   cudaMemcpy(MBQ_dev, &MBQ[0], sizeof(double)* NQ, cudaMemcpyHostToDevice);
+  cudaMemcpy(FNC_dev, &FNC[0], sizeof(double)* CEL, cudaMemcpyHostToDevice);
+  cudaMemcpy(MBZ_dev, &MBZ[0], sizeof(double)* NZ, cudaMemcpyHostToDevice);
+
 
 
   // 二维变量
@@ -796,13 +799,13 @@ void closeFile(){
 }
 
 __global__ void translate_step(
-    // int t,  const double QLUA, const double VMIN, const double C0, const double C1,
-    // int MBQ_LEN, int MBZQ_LEN, int MBZ_LEN, int MBW_LEN, int MDI_LEN,//数组长度
+    int t,  const double QLUA, const double VMIN, const double C0, const double C1,
+    int MBQ_LEN, int MBZQ_LEN, int MBZ_LEN, int MBW_LEN, int MDI_LEN,//数组长度
     const int CEL, const int DT, const int jt, const int NHQ, const double HM1, const double HM2,   // 常量
     double* H_pre, double* U_pre, double* V_pre, double* Z_pre, double* W_pre,  // 前一时刻结果
-    int* NV, double* AREA, double* ZBC, double* ZB1, double* DQT, double* DZT, double* TOPW, double* TOPD, double* MBQ, double* MBZQ, double* MBW, double* MDI, //double* FNC, double* MBZ, 
+    int* NV, double* AREA, double* ZBC, double* ZB1, double* DQT, double* DZT, double* TOPW, double* TOPD, double* MBQ, double* MBZQ, double* MBW, double* MDI, double* FNC, double* MBZ, 
     double* d_QT, double* d_ZT,
-    double** SIDE, double** SLCOS, double** SLSIN, double** KLAS, double** ZW, double** QW, int** NAC, //double** QT, double** ZT, double** COSF, double** SINF,
+    double** SIDE, double** SLCOS, double** SLSIN, double** KLAS, double** ZW, double** QW, int** NAC, double** QT, double** ZT, double** COSF, double** SINF,
     double* H_res, double* U_res, double* V_res, double* Z_res, double* W_res){   // 更新结果
     
   int pos = threadIdx.x+blockDim.x*blockIdx.x;// 线程pos计算HUVWZ[pos]位置的格子
@@ -884,12 +887,13 @@ int main() {
         
 
         translate_step<<<(CEL + block_size -1)/block_size, block_size>>>( 
-            // todo: 补充前两行参数
+            kt,  QLUA, VMIN, C0, C1,
+            NQ, CEL, CEL, CEL, CEL,//数组长度
             CEL, DT, jt, NHQ, HM1, HM2,
             H_dev, U_dev, V_dev, Z_dev, W_dev,
-            NV_dev, AREA_dev, ZBC_dev, ZB1_dev, DQT_dev, DZT_dev, TOPW_dev, TOPD_dev, MBQ_dev, MBZQ_dev, MBW_dev, MDI_dev,
+            NV_dev, AREA_dev, ZBC_dev, ZB1_dev, DQT_dev, DZT_dev, TOPW_dev, TOPD_dev, MBQ_dev, MBZQ_dev, MBW_dev, MDI_dev, FNC_dev, MBZ_dev,
             QT_dev, ZT_dev,
-            SIDE_devIdx, SLCOS_devIdx, SLSIN_devIdx, KLAS_devIdx, ZW_devIdx, QW_devIdx, NAC_devIdx,
+            SIDE_devIdx, SLCOS_devIdx, SLSIN_devIdx, KLAS_devIdx, ZW_devIdx, QW_devIdx, NAC_devIdx, QT_devIdx, ZT_devIdx, COSF_devIdx, SINF_devIdx,
             H_res, U_res, V_res, Z_res, W_res
         );
         // // 3. 结果处理

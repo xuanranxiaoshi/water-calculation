@@ -40,6 +40,6 @@ __device__ __forceinline__ void QF(double h, double u, double v, double (&F)[4])
 
 __device__ __forceinline__ double QD(double ZL, double ZR, double ZB);
 
-__device__ __forceinline__ void LAQP(double X, double &Y, double (&A)[5], double (&B)[5], double MS);
+__device__ __forceinline__ void LAQP(double X, double &Y, double *A, double *B, double MS);
 
 __device__ __forceinline__ int find_in_vec(double* list, int list_length, double target);
