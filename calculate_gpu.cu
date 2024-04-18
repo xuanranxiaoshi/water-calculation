@@ -1,20 +1,34 @@
 #include "read_data.hh"
 #include "common.hh"
-#include "calculate.hh"
-#include "calculate.cuh" // __device__ function 声明
+// #include "calculate.hh"
+#include "calculate.cuh" // calculate.hh中所有函数都被改造成__device__,声明全部移到此处
 
 using namespace DataManager;
 
-__device__ __forceinline__ void calculate_FLUX(int t, int pos, double (&FLUX)[4][4]) {
-  Vec QL(3);
-  Vec QR(3);
-  QL[0] = H[TIME_PREV][pos];
-  double U1 = U[TIME_PREV][pos];
-  double V1 = V[TIME_PREV][pos];
-  double H1 = H[TIME_PREV][pos];
-  double Z1 = Z[TIME_PREV][pos];
+__device__ __forceinline__ void calculate_FLUX
+(int t, int pos, double (&FLUX)[4][4],
+const int jt, const int NHQ, const double C0, const double C1, const double HM1, const double HM2,
+int MBQ_LEN, int MBZQ_LEN, int MBZ_LEN, int MBW_LEN, int MDI_LEN,//数组长度
+double* H_pre, double* U_pre, double* V_pre, double* Z_pre, double* MBQ, double* DQT, double* MBZQ, double* ZB1, double* ZBC, double* MBZ, double* DZT, double* TOPW, double* MBW, double* TOPD, double* MDI,
+double** KLAS, double** QT, double** SIDE, double** ZW, double** QW, double** ZT, double** NAC, double** COSF, double** SINF) {
+  // Vec QL(3);
+  // Vec QR(3);
+  // QL[0] = H[TIME_PREV][pos];
+  // double U1 = U[TIME_PREV][pos];
+  // double V1 = V[TIME_PREV][pos];
+  // double H1 = H[TIME_PREV][pos];
+  // double Z1 = Z[TIME_PREV][pos];
+  // double v_ZB1 = ZB1[pos];
+  // Vec FLR_OSHER(4);
+  double QL[3];
+  double QR[3];
+  QL[0] = H_pre[pos];
+  double U1 = U_pre[pos];
+  double V1 = V_pre[pos];
+  double H1 = H_pre[pos];
+  double Z1 = Z_pre[pos];
   double v_ZB1 = ZB1[pos];
-  Vec FLR_OSHER(4);
+  double FLR_OSHER[4];
 
   for (int j = 0; j < 4; j++) {
     // 局部变量声明，以及初始化运算。
@@ -36,15 +50,19 @@ __device__ __forceinline__ void calculate_FLUX(int t, int pos, double (&FLUX)[4]
       UC = 0;
       VC = 0;
     } else {
-      HC = std::fmax(H[TIME_PREV][NC], HM1);
+      HC = std::fmax(H_pre[NC], HM1);
       BC = ZBC[NC];
-      ZC = std::fmax(ZBC[NC], Z[TIME_PREV][NC]);
-      UC = U[TIME_PREV][NC];
-      VC = V[TIME_PREV][NC];
+      ZC = std::fmax(ZBC[NC], Z_pre[NC]);
+      UC = U_pre[NC];
+      VC = V_pre[NC];
     }
 
     if ((KP >= 1 && KP <= 8) || KP >= 10) {
-      BOUNDA(t, j, pos, FLUX, QL, QR, FIL, HC, UC, VC, ZC);
+      BOUNDA(t, j, pos, FLUX, QL, QR, FIL, HC, UC, VC, ZC,
+      jt, NHQ, C0, C1,
+      MBQ_LEN, MBZQ_LEN, MBZ_LEN, MBW_LEN, MDI_LEN,
+      H_pre, Z_pre, MBQ, DQT, MBZQ, ZBC, MBZ, DZT, TOPW, MBW, TOPD, MDI,
+      KLAS, QT, SIDE, ZW, QW, ZT);
     } else if (H1 <= HM1 && HC <= HM1) {
       FLUX_VAL(0, 0, 0, 0);
     } else if (ZI <= BC) {
@@ -83,7 +101,7 @@ __device__ __forceinline__ void calculate_FLUX(int t, int pos, double (&FLUX)[4]
         QR[1] = std::copysign(VMIN, UR);
       }
       QR[2] = VC * COSJ - UC * SINJ;
-      OSHER(t, pos, QL, QR, FIL, FLR_OSHER);
+      OSHER(t, pos, QL, QR, FIL, FLR_OSHER, H_pre);
       FLR(1) = FLR_OSHER[1] + (1 - std::min(HC / QR[0], 1.5)) * HC * UR * UR / 2;
       FLUX_VAL(FLR_OSHER[0], FLR(1), FLR_OSHER[2], FLR_OSHER[3]);
     }
@@ -91,11 +109,18 @@ __device__ __forceinline__ void calculate_FLUX(int t, int pos, double (&FLUX)[4]
 }
 
 __device__ __forceinline__ void calculate_WHUV
-(int t, int pos, double &WH, double &WU, double &WV,// 原参数
-double** SIDE, double** SLCOS, double** SLSIN) {
+(int t, int pos, double &WH, double &WU, double &WV,
+const int jt, const int NHQ, const double C0, const double C1, const double HM1, const double HM2,
+int MBQ_LEN, int MBZQ_LEN, int MBZ_LEN, int MBW_LEN, int MDI_LEN,//数组长度
+double* H_pre, double* U_pre, double* V_pre, double* Z_pre, double* MBQ, double* DQT, double* MBZQ, double* ZB1, double* ZBC, double* MBZ, double* DZT, double* TOPW, double* MBW, double* TOPD, double* MDI,
+double** KLAS, double** QT, double** SIDE, double** ZW, double** QW, double** ZT, double** NAC, double** COSF, double** SINF, double** SLCOS, double** SLSIN) {
   // Vec2 FLUX(4, Vec(4));
   double FLUX[4][4];// 在kernel中不能使用vector
-  calculate_FLUX(t, pos, FLUX);
+  calculate_FLUX(t, pos, FLUX,
+  jt, NHQ, C0, C1, HM1, HM2,
+  MBQ_LEN, MBZQ_LEN, MBZ_LEN, MBW_LEN, MDI_LEN,
+  H_pre, U_pre, V_pre, Z_pre, MBQ, DQT, MBZQ, ZB1, ZBC, MBZ, DZT, TOPW, MBW, TOPD, MDI,
+  KLAS, QT, SIDE, ZW, QW, ZT, NAC, COSF, SINF);
 
   for (int j = 0; j < 4; j++) {
     FLR(1) = FLUX[1][j] + FLUX[3][j];
@@ -111,9 +136,10 @@ double** SIDE, double** SLCOS, double** SLSIN) {
 
 __device__ __forceinline__ void calculate_HUV
 (int t, int pos,// 原参数
-const double HM1, const double HM2, const int DT, const double QLUA, const double VMIN,
-double* H_pre, double* U_pre, double* V_pre, int* NV, double* AREA, double* ZBC, double* FNC,
-double** SIDE, double** SLCOS, double** SLSIN,
+const int jt, const int NHQ, const double C0, const double C1, const double HM1, const double HM2, const int DT, const double QLUA, const double VMIN,
+int MBQ_LEN, int MBZQ_LEN, int MBZ_LEN, int MBW_LEN, int MDI_LEN,//数组长度
+int* NV, double* H_pre, double* U_pre, double* V_pre, double* Z_pre, double* MBQ, double* DQT, double* MBZQ, double* ZB1, double* ZBC, double* MBZ, double* DZT, double* TOPW, double* MBW, double* TOPD, double* MDI, double* AREA, double* FNC,
+double** KLAS, double** QT, double** SIDE, double** ZW, double** QW, double** ZT, double** NAC, double** COSF, double** SINF, double** SLCOS, double** SLSIN,
 double* H_res, double* U_res, double* V_res, double* Z_res, double* W_res) {
   double SIDEX, SIDES, HSIDE, DT2, DTA, WDTA, QX1, QY1, DTAU, DTAV, WSF;
   // double H1 = H[TIME_PREV][pos];
@@ -124,7 +150,11 @@ double* H_res, double* U_res, double* V_res, double* Z_res, double* W_res) {
   double V1 = V_pre[pos];
 
   double WH = 0.0, WU = 0.0, WV = 0.0;
-  calculate_WHUV(t, pos, WH, WU, WV, SIDE, SLCOS, SLSIN);
+  calculate_WHUV(t, pos, WH, WU, WV,
+  jt, NHQ, C0, C1, HM1, HM2,
+  MBQ_LEN, MBZQ_LEN, MBZ_LEN, MBW_LEN, MDI_LEN,
+  H_pre, U_pre, V_pre, Z_pre, MBQ, DQT, MBZQ, ZB1, ZBC, MBZ, DZT, TOPW, MBW, TOPD, MDI,
+  KLAS, QT, SIDE, ZW, QW, ZT, NAC, COSF, SINF, SLCOS, SLSIN);
 
   if (NV[pos] == 4) {
     SIDEX = std::min(0.5 * (SIDE[0][pos] + SIDE[2][pos]),
@@ -144,7 +174,7 @@ double* H_res, double* U_res, double* V_res, double* Z_res, double* W_res) {
   double H2, U2, V2, Z2, W2;
   H2 = std::max(H1 - WDTA * WH + QLUA, HM1);
   // Z2 = H[TIME_NOW][pos] + ZBC[pos];
-  Z2 = H2 + ZBC[pos];//可能是个读旧值的bug？暂时改成了读新值，存疑
+  Z2 = H2 + ZBC[pos];//Problem 0: 可能是个读旧值的bug？暂时改成了读新值，存疑
   if (H2 <= HM1) {
     U2 = 0.0;
     V2 = 0.0;
@@ -177,30 +207,37 @@ double* H_res, double* U_res, double* V_res, double* Z_res, double* W_res) {
   W_res[pos] = W2;
 }
 
-void BOUNDA(int t, int j, int pos, Vec2 &FLUX, Vec &QL, Vec &QR, double &FIL,
-            double HC, double UC, double VC, double ZC) {
-  Vec WZ(NHQ);
-  Vec WQ(NHQ);
+__device__ __forceinline__ void BOUNDA
+(int t, int j, int pos, double (&FLUX)[4][4],double (&QL)[3],double (&QR)[3], double &FIL, double HC, double UC, double VC, double ZC,
+const int jt, const int NHQ, const double C0, const double C1,
+int MBQ_LEN, int MBZQ_LEN, int MBZ_LEN, int MBW_LEN, int MDI_LEN,//数组长度
+double* H_pre, double* Z_pre, double* MBQ, double* DQT, double* MBZQ, double* ZBC, double* MBZ, double* DZT, double* TOPW, double* MBW, double* TOPD, double* MDI,
+double** KLAS, double** QT, double** SIDE, double** ZW, double** QW, double** ZT) {
+  // Vec WZ(NHQ);
+  // Vec WQ(NHQ);
+  // Problem 1: __device__中不能malloc memory,但是NHQ是从文件BOUNDARY中读取的const标量，值为5，这里先写死
+  double WZ[5];
+  double WQ[5];
 
   double S0 = 0.0002;
   double DX2 = 5000.0;
   double BRDTH = 100.0;
-  double CL = std::sqrt(9.81 * H[TIME_PREV][pos]);
+  double CL = std::sqrt(9.81 * H_pre[pos]);
 
   if (QL[1] > CL) {
-    FLUX_VAL(H[TIME_PREV][pos] * QL[1], FLR(0) * QL[1],
-             4.905 * H[TIME_PREV][pos] * H[TIME_PREV][pos], FLR(0) * QL[1]);
+    FLUX_VAL(H_pre[pos] * QL[1], FLR(0) * QL[1],
+             4.905 * H_pre[pos] * H_pre[pos], FLR(0) * QL[1]);
   }
   FLR(2) = 0;
-  if (QL[1] > 0) FLR(2) = H[TIME_PREV][pos] * QL[1] * QL[2];
+  if (QL[1] > 0) FLR(2) = H_pre[pos] * QL[1] * QL[2];
   double HB;
 //
   if (KLAS[j][pos] == 10) {
-    int pos_near = find_in_vec(MBQ, pos);
+    int pos_near = find_in_vec(MBQ, MBQ_LEN, pos);
     FLR(0) = -(QT[jt][pos_near] + DQT[pos_near] * t);
     FLR(0) = FLR(0) / SIDE[j][pos];
     double QB2 = FLR(0) * FLR(0);
-    double HB0 = H[TIME_PREV][pos];
+    double HB0 = H_pre[pos];
 
     for (int K = 1; K <= 20; K++) {
       double W_temp = FIL - FLR(0) / HB0;
@@ -220,8 +257,8 @@ void BOUNDA(int t, int j, int pos, Vec2 &FLUX, Vec &QL, Vec &QR, double &FIL,
     double CQ;
     double HR;
     double W_temp;
-    double HR0 = H[TIME_PREV][pos];
-    int pos_near = find_in_vec(MBZQ, pos);
+    double HR0 = H_pre[pos];
+    int pos_near = find_in_vec(MBZQ, MBZQ_LEN, pos);
     for (int i = 0; i < NHQ; i++) {
       WZ[i] = ZW[i][pos_near];
       WQ[i] = QW[i][pos_near];
@@ -237,12 +274,12 @@ void BOUNDA(int t, int j, int pos, Vec2 &FLUX, Vec &QL, Vec &QR, double &FIL,
     }
     FLR(0) = CQ;
     FLR(1) = CQ * CQ / HR;
-    HB = (H[TIME_PREV][pos] + HR) / 2;
+    HB = (H_pre[pos] + HR) / 2;
     FLR(3) = 4.905 * HB * HB;
   } else if (KLAS[j][pos] == 1) {
-    int pos_near = find_in_vec(MBZ, pos);
+    int pos_near = find_in_vec(MBZ, MBZ_LEN, pos);
     double HB1 = ZT[jt][pos_near] + DZT[pos_near] * t - ZBC[pos];
-    double FIAL = QL[2] + 6.264 * sqrt(H[TIME_PREV][pos]);
+    double FIAL = QL[2] + 6.264 * sqrt(H_pre[pos]);
     double UR0 = QL[2];
     double URB = UR0;
     for (int IURB = 1; IURB <= 30; IURB++) {
@@ -259,46 +296,46 @@ void BOUNDA(int t, int j, int pos, Vec2 &FLUX, Vec &QL, Vec &QR, double &FIL,
     FLR(0) = 0;
     FLR(1) = 0;
     FLR(2) = 0;
-    FLR(3) = 4.905 * H[TIME_PREV][pos] * H[TIME_PREV][pos];
+    FLR(3) = 4.905 * H_pre[pos] * H_pre[pos];
   } else if (KLAS[j][pos] == 5) {
     QL[1] = std::max(QL[1], 0.0);
-    FLR(0) = H[TIME_PREV][pos] * QL[1];
+    FLR(0) = H_pre[pos] * QL[1];
     FLR(1) = FLR(0) * QL[1];
-    FLR(3) = 4.905 * H[TIME_PREV][pos] * H[TIME_PREV][pos];
+    FLR(3) = 4.905 * H_pre[pos] * H_pre[pos];
   } else if (KLAS[j][pos] == 6) {
     double NE = pos;
     if (NAC[j][pos] != 0) {
       NE = std::fmin(pos, NAC[j][pos]);
     }
-    int pos_near = find_in_vec(MBW, pos);
+    int pos_near = find_in_vec(MBW, MBW_LEN, pos);
     double TOP = TOPW[pos_near];
-    if (Z[TIME_PREV][pos] < TOP || ZC < TOP) {
+    if (Z_pre[pos] < TOP || ZC < TOP) {
       FLR(0) = 0;
       FLR(1) = 0;
       FLR(2) = 0;
-      FLR(3) = 4.905 * H[TIME_PREV][pos] * H[TIME_PREV][pos];
+      FLR(3) = 4.905 * H_pre[pos] * H_pre[pos];
     }
-    if (Z[TIME_PREV][pos] > TOP && ZC < TOP) {
-      FLR(0) = C0 * std::pow(Z[TIME_PREV][pos] - TOP, 1.5);
+    if (Z_pre[pos] > TOP && ZC < TOP) {
+      FLR(0) = C0 * std::pow(Z_pre[pos] - TOP, 1.5);
       FLR(1) = FLR(0) * QL[1];
       FLR(2) = FLR(0) * QL[2];
       FLR(3) = 4.905 * std::pow(TOP - ZBC[pos], 2);
       return;
     }
-    if (Z[TIME_PREV][pos] < TOP && ZC > TOP) {
+    if (Z_pre[pos] < TOP && ZC > TOP) {
       FLR(0) = -C0 * std::pow(ZC - TOP, 1.5);
       FLR(1) = FLR(0) *
                std::min(UC * COSF[j][pos] + VC * SINF[j][pos], 0.0);
       FLR(2) = FLR(0) * (VC * COSF[j][pos] - UC * SINF[j][pos]);
-      FLR(3) = 4.905 * std::pow(Z[TIME_PREV][pos] - ZBC[pos], 2);
+      FLR(3) = 4.905 * std::pow(Z_pre[pos] - ZBC[pos], 2);
       return;
     }
-    double DZ = std::abs(Z[TIME_PREV][pos] - ZC);
+    double DZ = std::abs(Z_pre[pos] - ZC);
     double HD;
     double UN;
     double VT;
-    if (Z[TIME_PREV][pos] <= ZC) {
-      HD = Z[TIME_PREV][pos] - TOP;
+    if (Z_pre[pos] <= ZC) {
+      HD = Z_pre[pos] - TOP;
       UN = std::min(UC * COSF[j][pos] + VC * SINF[j][pos], 0.0);
       VT = VC * COSF[j][pos] - UC * SINF[j][pos];
     } else {
@@ -308,20 +345,20 @@ void BOUNDA(int t, int j, int pos, Vec2 &FLUX, Vec &QL, Vec &QR, double &FIL,
     }
     double SH = HD + DZ;
     double CE = std::min(1.0, 1.05 * std::pow(DZ / SH, 0.33333));
-    if (Z[TIME_PREV][pos] < ZC && UN > 0.0) {
+    if (Z_pre[pos] < ZC && UN > 0.0) {
       UN = 0.0;
     }
     FLR(0) =
-        std::copysign(CE * C1 * std::pow(SH, 1.5), Z[TIME_PREV][pos] - ZC);
+        std::copysign(CE * C1 * std::pow(SH, 1.5), Z_pre[pos] - ZC);
     FLR(1) = FLR(0) * std::abs(UN);
     FLR(2) = FLR(0) * VT;
     FLR(3) = 4.905 * std::pow(TOP - ZBC[pos], 2);
   } else if (KLAS[j][pos] == 7) {
-    int pos_near = find_in_vec(MDI, pos);
+    int pos_near = find_in_vec(MDI, MDI_LEN, pos);
     double TOP = TOPD[pos_near];
-    if (Z[TIME_PREV][pos] > TOP || ZC > TOP) {
+    if (Z_pre[pos] > TOP || ZC > TOP) {
       KLAS[j][pos] = 0;
-      double CQ = QD(Z[TIME_PREV][pos], ZC, TOP);
+      double CQ = QD(Z_pre[pos], ZC, TOP);
       double CB = BRDTH / SIDE[j][pos];
       FLR(0) = CQ * CB;
       FLR(1) = CB * std::copysign(CQ * CQ / HB, CQ);
@@ -331,17 +368,19 @@ void BOUNDA(int t, int j, int pos, Vec2 &FLUX, Vec &QL, Vec &QR, double &FIL,
       FLR(0) = 0;
       FLR(1) = 0;
       FLR(2) = 0;
-      FLR(3) = 4.905 * H[TIME_PREV][pos] * H[TIME_PREV][pos];
+      FLR(3) = 4.905 * H_pre[pos] * H_pre[pos];
     }
   }
 }
 
-void OSHER(int t, int pos, Vec &QL, Vec &QR, double &FIL, Vec &FLR_OSHER) {
+__device__ __forceinline__ void OSHER
+(int t, int pos, double (&QL)[3], double (&QR)[3], double &FIL, double (&FLR_OSHER)[4],
+double* H_pre) {
   double CR = sqrt(9.81 * QR[0]);
   double FIR = QR[1] - 2 * CR;
   double UA = (FIL + FIR) / 2;
   double CA = fabs((FIL - FIR) / 4);
-  double CL = std::sqrt(9.81 * H[TIME_PREV][pos]);
+  double CL = std::sqrt(9.81 * H_pre[pos]);
 
   FLR_OSHER[0] = 0;
   FLR_OSHER[1] = 0;
@@ -475,8 +514,10 @@ void OSHER(int t, int pos, Vec &QL, Vec &QR, double &FIL, Vec &FLR_OSHER) {
 #include <cstdlib>
 
 template<int T>
-void QS(int j, int pos, const Vec &QL, const Vec &QR, double &FIL, double &FIR, Vec& FLUX_OSHER){
-  Vec F(4);
+__device__ __forceinline__ void QS
+(int j, int pos, const double (&QL)[3], const double (&QR)[3], double &FIL, double &FIR, double (&FLR_OSHER)[4]){
+  // Vec F(4);
+  double* F[4];
 
   if constexpr (T == 1) {
     QF(QL[0], QL[1], QL[2], F);
@@ -523,7 +564,7 @@ void QS(int j, int pos, const Vec &QL, const Vec &QR, double &FIL, double &FIR, 
   }
 }
 
-void QF(double h, double u, double v, Vec &F) {
+__device__ __forceinline__ void QF(double h, double u, double v, double (&F)[4]) {
   // COMPUTATION OF FLUX COMPONENTS
   F[0] = h * u;
   F[1] = F[0] * u;
@@ -531,12 +572,18 @@ void QF(double h, double u, double v, Vec &F) {
   F[3] = 4.905 * h * h;
 }
 
-int find_in_vec(const Vec& list, double target){
-  auto it = std::find(list.begin(), list.end(), target);
-  return std::distance(list.begin(), it);
+// int find_in_vec(const Vec& list, double target){
+//   auto it = std::find(list.begin(), list.end(), target);
+//   return std::distance(list.begin(), it);
+// }
+
+// Problem 2:由于__device__中不能使用vector，使用数组则需要传入长度参数，该参数需要从__global__传入
+__device__ __forceinline__ int find_in_vec(double* list, int list_length, double target){
+   double* ptr = std::find(list, list+list_length, target);
+   return ptr-list;
 }
 
-void LAQP(double X, double &Y, Vec A, Vec B, double MS) {
+__device__ __forceinline__ void LAQP(double X, double &Y, double (&A)[5], double (&B)[5], double MS) {
   int ILAQ = 0;
   int i;
 
@@ -586,7 +633,7 @@ void LAQP(double X, double &Y, Vec A, Vec B, double MS) {
   }
 }
 
-double QD(double ZL, double ZR, double ZB) {
+__device__ __forceinline__ double QD(double ZL, double ZR, double ZB) {
   const double CM = 0.384;
   const double SIGMA = 0.667;
   const double FI = 4.43;
@@ -682,20 +729,22 @@ int main() {
 }
 
 
-__global__ void translate_step(int t, const int CEL, const int DT, const int jt, const int NHQ, const double HM1, const double HM2, const double QLUA, const double VMIN,
+__global__ void translate_step(int t, const int CEL, const int DT, const int jt, const int NHQ, const double HM1, const double HM2, const double QLUA, const double VMIN, const double C0, const double C1,
+  int MBQ_LEN, int MBZQ_LEN, int MBZ_LEN, int MBW_LEN, int MDI_LEN,//数组长度
   double* H_pre, double* U_pre, double* V_pre, double* Z_pre, double* W_pre,
-  int* NV, double* AREA, double* ZBC, double* ZB1, double* DQT, double* DZT, double* TOPW, double* TOPD, double* MBQ, double* MBZQ, double* MBW, double* MDI, double* FNC,
+  int* NV, double* AREA, double* ZBC, double* ZB1, double* DQT, double* DZT, double* TOPW, double* TOPD, double* MBQ, double* MBZQ, double* MBW, double* MDI, double* FNC, double* MBZ, 
   double* d_QT, double* d_ZT,
-  double** SIDE, double** SLCOS, double** SLSIN, double** KLAS, double** NAC, double** ZW, double** QW,
+  double** SIDE, double** SLCOS, double** SLSIN, double** KLAS, double** NAC, double** ZW, double** QW, double** QT, double** ZT, double** COSF, double** SINF,
   double* H_res, double* U_res, double* V_res, double* Z_res, double* W_res){
     
   int pos = threadIdx.x+blockDim.x*blockIdx.x;// 线程pos计算HUVWZ[pos]位置的格子
   // calculate_HUV
   calculate_HUV(
     t, pos,
-    HM1, HM2, DT, QLUA, VMIN,
-    H_pre, U_pre, V_pre, NV, AREA, ZBC, FNC,
-    SIDE, SLCOS, SLSIN,
+    jt, NHQ, C0, C1, HM1, HM2, DT, QLUA, VMIN,
+    MBQ_LEN, MBZQ_LEN, MBZ_LEN, MBW_LEN, MDI_LEN,
+    NV, H_pre, U_pre, V_pre, Z_pre, MBQ, DQT, MBZQ, ZB1, ZBC, MBZ, DZT, TOPW, MBW, TOPD, MDI, AREA, FNC,
+    KLAS, QT, SIDE, ZW, QW, ZT, NAC, COSF, SINF, SLCOS, SLSIN,
     H_res, U_res, V_res, Z_res, W_res);
 
   // calculate_WHUV
