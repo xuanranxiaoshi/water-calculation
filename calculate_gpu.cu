@@ -324,9 +324,14 @@ double* H_pre, double* Z_pre, double* MBQ, double* DQT, double* MBZQ, double* ZB
 double** KLAS, double** QT, double** SIDE, double** ZW, double** QW, double** ZT, double** NAC, double** COSF, double** SINF) {
   // Vec WZ(NHQ);
   // Vec WQ(NHQ);
+  //=====================================================
   // Problem 1: __device__中不能malloc memory,但是NHQ是从文件BOUNDARY中读取的const标量，值为5，这里先写死
-  double WZ[5];
-  double WQ[5];
+  // double WZ[5];
+  // double WQ[5];
+  //=====================================================
+  double *WZ, *WQ;
+  cudaMalloc((void**)WZ, sizeof(double) * NHQ);
+  cudaMalloc((void**)WQ, sizeof(double) * NHQ);
 
   double S0 = 0.0002;
   double DX2 = 5000.0;
@@ -481,6 +486,8 @@ double** KLAS, double** QT, double** SIDE, double** ZW, double** QW, double** ZT
       FLR(3) = 4.905 * H_pre[pos] * H_pre[pos];
     }
   }
+  cudaFree((void**)WZ);
+  cudaFree((void**)WQ);
 }
 
 __device__ __forceinline__ void OSHER
@@ -696,7 +703,7 @@ __device__ __forceinline__ int find_in_vec(double* list, int list_length, double
   return index;
 }
 
-__device__ __forceinline__ void LAQP(double X, double &Y, double (&A)[5], double (&B)[5], double MS) {
+__device__ __forceinline__ void LAQP(double X, double &Y, double *A, double *B, double MS) {
   int ILAQ = 0;
   int i;
 
