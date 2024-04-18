@@ -1,13 +1,18 @@
 #include "read_data.hh"
-#include "common.hh"
-// #include "calculate.hh"
-#include "calculate.cuh" // calculate.hh中所有函数都被改造成__device__,声明全部移到此处
+#include "calculate_gpu.cuh" // calculate.hh中所有函数都被改造成__device__,声明全部移到此处
 
-using namespace DataManager;
+// using namespace DataManager;
+
+#define FLR(x) FLUX[x][j]
+#define FLUX_VAL(A, B, C, D)                                                   \
+  FLR(0) = A;                                                                  \
+  FLR(1) = B;                                                                  \
+  FLR(2) = C;                                                                  \
+  FLR(3) = D
 
 __device__ __forceinline__ void calculate_FLUX
 (int t, int pos, double (&FLUX)[4][4],
-const int jt, const int NHQ, const double C0, const double C1, const double HM1, const double HM2,
+const int jt, const int NHQ, const double C0, const double C1, const double HM1, const double HM2, const double VMIN,
 int MBQ_LEN, int MBZQ_LEN, int MBZ_LEN, int MBW_LEN, int MDI_LEN,//数组长度
 double* H_pre, double* U_pre, double* V_pre, double* Z_pre, double* MBQ, double* DQT, double* MBZQ, double* ZB1, double* ZBC, double* MBZ, double* DZT, double* TOPW, double* MBW, double* TOPD, double* MDI,
 double** KLAS, double** QT, double** SIDE, double** ZW, double** QW, double** ZT, double** NAC, double** COSF, double** SINF) {
@@ -62,7 +67,7 @@ double** KLAS, double** QT, double** SIDE, double** ZW, double** QW, double** ZT
       jt, NHQ, C0, C1,
       MBQ_LEN, MBZQ_LEN, MBZ_LEN, MBW_LEN, MDI_LEN,
       H_pre, Z_pre, MBQ, DQT, MBZQ, ZBC, MBZ, DZT, TOPW, MBW, TOPD, MDI,
-      KLAS, QT, SIDE, ZW, QW, ZT);
+      KLAS, QT, SIDE, ZW, QW, ZT, NAC, COSF, SINF);
     } else if (H1 <= HM1 && HC <= HM1) {
       FLUX_VAL(0, 0, 0, 0);
     } else if (ZI <= BC) {
@@ -96,13 +101,13 @@ double** KLAS, double** QT, double** SIDE, double** ZW, double** QW, double** ZT
     } else {
       QR[0] = std::fmax(ZC - ZBC[pos], HM1);
       double UR = UC * COSJ + VC * SINJ;
-      QR[1] = UR * std::min(HC / QR[0], 1.5);
+      QR[1] = UR * min(HC / QR[0], 1.5);
       if (HC <= HM2 || QR[0] <= HM2) {
         QR[1] = std::copysign(VMIN, UR);
       }
       QR[2] = VC * COSJ - UC * SINJ;
       OSHER(t, pos, QL, QR, FIL, FLR_OSHER, H_pre);
-      FLR(1) = FLR_OSHER[1] + (1 - std::min(HC / QR[0], 1.5)) * HC * UR * UR / 2;
+      FLR(1) = FLR_OSHER[1] + (1 - min(HC / QR[0], 1.5)) * HC * UR * UR / 2;
       FLUX_VAL(FLR_OSHER[0], FLR(1), FLR_OSHER[2], FLR_OSHER[3]);
     }
   }
@@ -110,14 +115,14 @@ double** KLAS, double** QT, double** SIDE, double** ZW, double** QW, double** ZT
 
 __device__ __forceinline__ void calculate_WHUV
 (int t, int pos, double &WH, double &WU, double &WV,
-const int jt, const int NHQ, const double C0, const double C1, const double HM1, const double HM2,
+const int jt, const int NHQ, const double C0, const double C1, const double HM1, const double HM2, const double VMIN,
 int MBQ_LEN, int MBZQ_LEN, int MBZ_LEN, int MBW_LEN, int MDI_LEN,//数组长度
 double* H_pre, double* U_pre, double* V_pre, double* Z_pre, double* MBQ, double* DQT, double* MBZQ, double* ZB1, double* ZBC, double* MBZ, double* DZT, double* TOPW, double* MBW, double* TOPD, double* MDI,
 double** KLAS, double** QT, double** SIDE, double** ZW, double** QW, double** ZT, double** NAC, double** COSF, double** SINF, double** SLCOS, double** SLSIN) {
   // Vec2 FLUX(4, Vec(4));
   double FLUX[4][4];// 在kernel中不能使用vector
   calculate_FLUX(t, pos, FLUX,
-  jt, NHQ, C0, C1, HM1, HM2,
+  jt, NHQ, C0, C1, HM1, HM2, VMIN,
   MBQ_LEN, MBZQ_LEN, MBZ_LEN, MBW_LEN, MDI_LEN,
   H_pre, U_pre, V_pre, Z_pre, MBQ, DQT, MBZQ, ZB1, ZBC, MBZ, DZT, TOPW, MBW, TOPD, MDI,
   KLAS, QT, SIDE, ZW, QW, ZT, NAC, COSF, SINF);
@@ -151,28 +156,28 @@ double* H_res, double* U_res, double* V_res, double* Z_res, double* W_res) {
 
   double WH = 0.0, WU = 0.0, WV = 0.0;
   calculate_WHUV(t, pos, WH, WU, WV,
-  jt, NHQ, C0, C1, HM1, HM2,
+  jt, NHQ, C0, C1, HM1, HM2, VMIN,
   MBQ_LEN, MBZQ_LEN, MBZ_LEN, MBW_LEN, MDI_LEN,
   H_pre, U_pre, V_pre, Z_pre, MBQ, DQT, MBZQ, ZB1, ZBC, MBZ, DZT, TOPW, MBW, TOPD, MDI,
   KLAS, QT, SIDE, ZW, QW, ZT, NAC, COSF, SINF, SLCOS, SLSIN);
 
   if (NV[pos] == 4) {
-    SIDEX = std::min(0.5 * (SIDE[0][pos] + SIDE[2][pos]),
+    SIDEX = min(0.5 * (SIDE[0][pos] + SIDE[2][pos]),
                      0.5 * (SIDE[1][pos] + SIDE[3][pos]));
   } else {
     SIDES = 0.5 * (SIDE[0][pos] + SIDE[1][pos] + SIDE[2][pos]);
     SIDEX = std::sqrt((SIDES - SIDE[0][pos]) * (SIDES - SIDE[1][pos]) *
                       (SIDES - SIDE[2][pos]) / SIDES);
   }
-  HSIDE = std::max(H1, HM1);
+  HSIDE = max(H1, HM1);
   DT2 = SIDEX / (U1 + std::sqrt(9.81 * HSIDE));
   DT2 = std::fmin(DT, DT2);
-  DT2 = std::max(DT2, DT / 10.0);
+  DT2 = max(DT2, DT / 10.0);
   DTA = 1.0 * DT2 / (1.0 * AREA[pos]);
   WDTA = 1.00 * DTA;
 
   double H2, U2, V2, Z2, W2;
-  H2 = std::max(H1 - WDTA * WH + QLUA, HM1);
+  H2 = max(H1 - WDTA * WH + QLUA, HM1);
   // Z2 = H[TIME_NOW][pos] + ZBC[pos];
   Z2 = H2 + ZBC[pos];//Problem 0: 可能是个读旧值的bug？暂时改成了读新值，存疑
   if (H2 <= HM1) {
@@ -180,8 +185,8 @@ double* H_res, double* U_res, double* V_res, double* Z_res, double* W_res) {
     V2 = 0.0;
   } else {
     if (H2 <= HM2) {
-      U2 = std::copysign( std::min(VMIN, std::abs(U1)), U1);
-      V2 = std::copysign( std::min(VMIN, std::abs(V1)), V1);
+      U2 = std::copysign( min(VMIN, std::abs(U1)), U1);
+      V2 = std::copysign( min(VMIN, std::abs(V1)), V1);
     } else {
       QX1 = H1 * U1;
       QY1 = H1 * V1;
@@ -190,8 +195,8 @@ double* H_res, double* U_res, double* V_res, double* Z_res, double* W_res) {
       WSF = FNC[pos] * std::sqrt(U1 * U1 + V1 * V1) / std::pow(H1, 0.33333);
       U2 = (QX1 - DTAU - DT * WSF * U1) / H2;
       V2 = (QY1 - DTAV - DT * WSF * V1) / H2;
-      U2 = std::copysign( std::min(std::abs(U2), 5.0), U2);
-      V2 = std::copysign( std::min(std::abs(V2), 5.0), V2);
+      U2 = std::copysign( min(std::abs(U2), 5.0), U2);
+      V2 = std::copysign( min(std::abs(V2), 5.0), V2);
     }
   }
   W2 = std::sqrt(U2 * U2 + V2 * V2);
@@ -212,7 +217,7 @@ __device__ __forceinline__ void BOUNDA
 const int jt, const int NHQ, const double C0, const double C1,
 int MBQ_LEN, int MBZQ_LEN, int MBZ_LEN, int MBW_LEN, int MDI_LEN,//数组长度
 double* H_pre, double* Z_pre, double* MBQ, double* DQT, double* MBZQ, double* ZBC, double* MBZ, double* DZT, double* TOPW, double* MBW, double* TOPD, double* MDI,
-double** KLAS, double** QT, double** SIDE, double** ZW, double** QW, double** ZT) {
+double** KLAS, double** QT, double** SIDE, double** ZW, double** QW, double** ZT, double** NAC, double** COSF, double** SINF) {
   // Vec WZ(NHQ);
   // Vec WQ(NHQ);
   // Problem 1: __device__中不能malloc memory,但是NHQ是从文件BOUNDARY中读取的const标量，值为5，这里先写死
@@ -298,7 +303,7 @@ double** KLAS, double** QT, double** SIDE, double** ZW, double** QW, double** ZT
     FLR(2) = 0;
     FLR(3) = 4.905 * H_pre[pos] * H_pre[pos];
   } else if (KLAS[j][pos] == 5) {
-    QL[1] = std::max(QL[1], 0.0);
+    QL[1] = max(QL[1], 0.0);
     FLR(0) = H_pre[pos] * QL[1];
     FLR(1) = FLR(0) * QL[1];
     FLR(3) = 4.905 * H_pre[pos] * H_pre[pos];
@@ -325,7 +330,7 @@ double** KLAS, double** QT, double** SIDE, double** ZW, double** QW, double** ZT
     if (Z_pre[pos] < TOP && ZC > TOP) {
       FLR(0) = -C0 * std::pow(ZC - TOP, 1.5);
       FLR(1) = FLR(0) *
-               std::min(UC * COSF[j][pos] + VC * SINF[j][pos], 0.0);
+               min(UC * COSF[j][pos] + VC * SINF[j][pos], 0.0);
       FLR(2) = FLR(0) * (VC * COSF[j][pos] - UC * SINF[j][pos]);
       FLR(3) = 4.905 * std::pow(Z_pre[pos] - ZBC[pos], 2);
       return;
@@ -336,15 +341,15 @@ double** KLAS, double** QT, double** SIDE, double** ZW, double** QW, double** ZT
     double VT;
     if (Z_pre[pos] <= ZC) {
       HD = Z_pre[pos] - TOP;
-      UN = std::min(UC * COSF[j][pos] + VC * SINF[j][pos], 0.0);
+      UN = min(UC * COSF[j][pos] + VC * SINF[j][pos], 0.0);
       VT = VC * COSF[j][pos] - UC * SINF[j][pos];
     } else {
       HD = ZC - TOP;
-      UN = std::max(QL[1], 0.0);
+      UN = max(QL[1], 0.0);
       VT = QL[2];
     }
     double SH = HD + DZ;
-    double CE = std::min(1.0, 1.05 * std::pow(DZ / SH, 0.33333));
+    double CE = min(1.0, 1.05 * std::pow(DZ / SH, 0.33333));
     if (Z_pre[pos] < ZC && UN > 0.0) {
       UN = 0.0;
     }
@@ -515,9 +520,9 @@ double* H_pre) {
 
 template<int T>
 __device__ __forceinline__ void QS
-(int j, int pos, const double (&QL)[3], const double (&QR)[3], double &FIL, double &FIR, double (&FLR_OSHER)[4]){
+(int j, int pos, const double (&QL)[3], const double (&QR)[3], double &FIL, double &FIR, double (&FLUX_OSHER)[4]){
   // Vec F(4);
-  double* F[4];
+  double F[4];
 
   if constexpr (T == 1) {
     QF(QL[0], QL[1], QL[2], F);
@@ -638,8 +643,8 @@ __device__ __forceinline__ double QD(double ZL, double ZR, double ZB) {
   const double SIGMA = 0.667;
   const double FI = 4.43;
 
-  double ZU = std::max(ZL, ZR);
-  double ZD = std::min(ZL, ZR);
+  double ZU = max(ZL, ZR);
+  double ZD = min(ZL, ZR);
   double H0 = ZU - ZB;
   double HS = ZD - ZB;
   double DELTA = HS / H0;
@@ -662,19 +667,21 @@ __device__ __forceinline__ double QD(double ZL, double ZR, double ZB) {
 
 // Kernel函数，具体可以放到其他核上跑
 // 0 <= pos <= CEL
-void time_step(int t, int pos) {
-  calculate_HUV(t, pos);
-}
+// void time_step(int t, int pos) {
+//   calculate_HUV(t, pos);
+// }
 
-#include <omp.h>
+// #include <omp.h>
 
 void closeFile(){
+  using namespace DataManager;
   ZUV_file.close();
   H2U2V2_file.close();
   XY_TEC_file.close();
 }
 
 int main() {
+  using namespace DataManager;
   //1. 数据初始化
   READ_DATA("TIME", MDT, NDAYS)
   READ_DATA("GIRD", NOD, CEL)
@@ -692,8 +699,6 @@ int main() {
   XY_TEC_file.open("XY-TEC.DAT", std::ios::out | std::ofstream::trunc);
   atexit(closeFile);
 
-  double end_time;
-  double start_time;
   int K0 = MDT / DT;
   int pos;
 
@@ -711,7 +716,8 @@ int main() {
       }
     }
 
-    start_time = omp_get_wtime();
+    // start_time = omp_get_wtime();
+    clock_t start_time = clock();
     for (kt = 1; kt <= K0; kt++) {
 
       // for (pos = 0; pos < CEL; pos++) {
@@ -720,8 +726,11 @@ int main() {
       // todo: 调用 kernel 函数
 
     }
-    end_time = omp_get_wtime();
-    cout << end_time - start_time << " seconds" << endl;
+    // end_time = omp_get_wtime();
+    // cout << end_time - start_time << " seconds" << endl;
+    clock_t end_time = clock();
+    double duration = ((double)(end_time-start_time))/CLOCKS_PER_SEC;
+    printf("Done. Compute took %f seconds\n", duration);
     
     output_data(kt);
   }
