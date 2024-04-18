@@ -1,7 +1,7 @@
 #include "read_data.hh"
 #include "calculate.cuh" // calculate.hh中所有函数都被改造成__device__,声明全部移到此处
 
-// using namespace DataManager;
+using namespace DataManager;
 
 #define FLR(x) FLUX[x][j]
 #define FLUX_VAL(A, B, C, D)                                                   \
@@ -9,6 +9,109 @@
   FLR(1) = B;                                                                  \
   FLR(2) = C;                                                                  \
   FLR(3) = D
+
+// device 变量
+int* NV_dev;
+double* H_dev, *U_dev, *V_dev, *Z_dev, *W_dev, *QT_dev, *ZT_dev;
+double* AREA_dev, *ZBC_dev, *ZB1_dev, *DQT_dev,  *DZT_dev,  *TOPW_dev,  *TOPD_dev,  *MBQ_dev,  *MBZQ_dev,  *MBW_dev,  *MDI_dev;
+double* H_res, *U_res, *V_res, *Z_res, *W_res;
+
+// 二维矩阵的索引指针
+int **NAC_hIdx, **NAC_devIdx;
+double** SIDE_hIdx, **SLCOS_hIdx, **SLSIN_hIdx, **KLAS_hIdx, **ZW_hIdx, **QW_hIdx;
+double** SIDE_devIdx, **SLCOS_devIdx, **SLSIN_devIdx, **KLAS_devIdx, **ZW_devIdx, **QW_devIdx;
+
+// 二维矩阵的实际数据指针
+int *NAC_dev;
+double* SIDE_dev, *SLCOS_dev, *SLSIN_dev, *KLAS_dev, *ZW_dev, *QW_dev;
+
+size_t pitchInt, pitchDouble;
+const int block_size = 512;  // CUDA maximum is 1024
+
+void initialize_deviceVar(){
+  // 显式内存分配
+  cudaMalloc((void**) &H_dev, sizeof(double) * CEL);
+  cudaMalloc((void**) &U_dev, sizeof(double) * CEL);
+  cudaMalloc((void**) &V_dev, sizeof(double) * CEL);
+  cudaMalloc((void**) &Z_dev, sizeof(double) * CEL);
+  cudaMalloc((void**) &W_dev, sizeof(double) * CEL);
+  cudaMalloc((void**) &QT_dev, sizeof(double) * NDAYS);
+  cudaMalloc((void**) &ZT_dev, sizeof(double) * NDAYS);
+  cudaMalloc((void**) &NV_dev, sizeof(int) * CEL);
+  
+  cudaMalloc((void**) &AREA_dev, sizeof(double)* CEL);
+  cudaMalloc((void**) &ZBC_dev, sizeof(double)* CEL);
+  cudaMalloc((void**) &ZB1_dev, sizeof(double)* CEL);
+  cudaMalloc((void**) &DQT_dev, sizeof(double)* NQ);
+  cudaMalloc((void**) &DZT_dev, sizeof(double)* NZ);
+  cudaMalloc((void**) &MBQ_dev, sizeof(double)* NQ);
+  cudaMalloc((void**) &TOPW_dev, sizeof(double)* CEL);
+  cudaMalloc((void**) &TOPD_dev, sizeof(double)* CEL);
+  cudaMalloc((void**) &MBZQ_dev, sizeof(double)* CEL);
+  cudaMalloc((void**) &MBW_dev, sizeof(double)* CEL);
+  cudaMalloc((void**) &MDI_dev, sizeof(double)* CEL);
+
+  cudaMalloc((void**) &H_res, sizeof(double)* CEL);
+  cudaMalloc((void**) &U_res, sizeof(double)* CEL);
+  cudaMalloc((void**) &V_res, sizeof(double)* CEL);
+  cudaMalloc((void**) &Z_res, sizeof(double)* CEL);
+  cudaMalloc((void**) &W_res, sizeof(double)* CEL);
+
+
+  // 时间无关的数据迁移
+  cudaMemcpy(NV_dev, &NV[0] , sizeof(int) * CEL, cudaMemcpyHostToDevice);
+  cudaMemcpy(ZBC_dev, &ZBC[0], sizeof(double)* CEL,  cudaMemcpyHostToDevice);
+  cudaMemcpy(AREA_dev, &AREA[0], sizeof(double)* CEL, cudaMemcpyHostToDevice);
+  cudaMemcpy(ZB1_dev, &ZB1[0], sizeof(double)* CEL,  cudaMemcpyHostToDevice);
+  cudaMemcpy(MBQ_dev, &MBQ[0], sizeof(double)* NQ, cudaMemcpyHostToDevice);
+
+
+  // 二维变量
+  int Wd = CEL;
+  int Ht = 4;
+
+  NAC_hIdx = new int*[Ht];
+  SIDE_hIdx = new double*[Ht];
+  SLCOS_hIdx = new double*[Ht];
+  SLSIN_hIdx = new double*[Ht];
+  KLAS_hIdx = new double*[Ht];
+
+  cudaMalloc((void**) &NAC_devIdx, sizeof(int*) * Ht);
+  cudaMalloc((void**) &SIDE_devIdx, sizeof(double*) * Ht);
+  cudaMalloc((void**) &SLCOS_devIdx, sizeof(double*) * Ht);
+  cudaMalloc((void**) &SLSIN_devIdx, sizeof(double*) * Ht);
+  cudaMalloc((void**) &KLAS_devIdx, sizeof(double*) * Ht);
+
+  cudaMallocPitch((void**) &NAC_dev, &pitchInt, sizeof(int) * Wd, Ht);
+  cudaMallocPitch((void**) &SIDE_dev, &pitchDouble, sizeof(double) * Wd, Ht);
+  cudaMallocPitch((void**) &SLCOS_dev, &pitchDouble, sizeof(double) * Wd, Ht);
+  cudaMallocPitch((void**) &SLSIN_dev, &pitchDouble, sizeof(double) * Wd, Ht);
+  cudaMallocPitch((void**) &KLAS_dev, &pitchDouble, sizeof(double) * Wd, Ht);
+
+  for(int row = 0; row < Ht; ++row){   
+      // 1. host 端建立 device 上数据的索引
+      NAC_hIdx[row] = &NAC_dev[row*(pitchInt/sizeof(int))];
+      SIDE_hIdx[row] = &SIDE_dev[row*(pitchDouble/sizeof(double))];
+      SLCOS_hIdx[row] = &SLCOS_dev[row*(pitchDouble/sizeof(double))];
+      SLSIN_hIdx[row] = &SLSIN_dev[row*(pitchDouble/sizeof(double))];
+      KLAS_hIdx[row] = &KLAS_dev[row*(pitchDouble/sizeof(double))];
+
+      // 2. 数据从 host 拷贝到 device
+		  cudaMemcpy(&NAC_dev[row*(pitchInt/sizeof(int))], NAC[row].data(), sizeof(int)*Wd, cudaMemcpyHostToDevice);
+      cudaMemcpy(&SIDE_dev[row*(pitchDouble/sizeof(double))], SIDE[row].data(), sizeof(double)*Wd, cudaMemcpyHostToDevice);
+      cudaMemcpy(&SLCOS_dev[row*(pitchDouble/sizeof(double))], SLCOS[row].data(), sizeof(double)*Wd, cudaMemcpyHostToDevice);
+      cudaMemcpy(&SLSIN_dev[row*(pitchDouble/sizeof(double))], SLSIN[row].data(), sizeof(double)*Wd, cudaMemcpyHostToDevice);
+      cudaMemcpy(&KLAS_dev[row*(pitchDouble/sizeof(double))], KLAS[row].data(), sizeof(double)*Wd, cudaMemcpyHostToDevice);
+	}
+  
+  // 3. host 端的索引拷贝到 device 端
+  cudaMemcpy(NAC_devIdx, NAC_hIdx, sizeof(int*) * Ht, cudaMemcpyHostToDevice);
+  cudaMemcpy(SIDE_devIdx, SIDE_hIdx, sizeof(double*)*Ht, cudaMemcpyHostToDevice);
+  cudaMemcpy(SLCOS_devIdx, SLCOS_hIdx, sizeof(double*)*Ht, cudaMemcpyHostToDevice);
+  cudaMemcpy(SLSIN_devIdx, SLSIN_hIdx, sizeof(double*)*Ht, cudaMemcpyHostToDevice);
+  cudaMemcpy(KLAS_devIdx, KLAS_hIdx, sizeof(double*)*Ht, cudaMemcpyHostToDevice);
+  
+}
 
 __device__ __forceinline__ void calculate_FLUX
 (int t, int pos, double (&FLUX)[4][4],
@@ -685,8 +788,33 @@ void closeFile(){
   XY_TEC_file.close();
 }
 
+__global__ void translate_step(
+    // int t,  const double QLUA, const double VMIN, const double C0, const double C1,
+    // int MBQ_LEN, int MBZQ_LEN, int MBZ_LEN, int MBW_LEN, int MDI_LEN,//数组长度
+    const int CEL, const int DT, const int jt, const int NHQ, const double HM1, const double HM2,   // 常量
+    double* H_pre, double* U_pre, double* V_pre, double* Z_pre, double* W_pre,  // 前一时刻结果
+    int* NV, double* AREA, double* ZBC, double* ZB1, double* DQT, double* DZT, double* TOPW, double* TOPD, double* MBQ, double* MBZQ, double* MBW, double* MDI, //double* FNC, double* MBZ, 
+    double* d_QT, double* d_ZT,
+    double** SIDE, double** SLCOS, double** SLSIN, double** KLAS, double** ZW, double** QW, int** NAC, //double** QT, double** ZT, double** COSF, double** SINF,
+    double* H_res, double* U_res, double* V_res, double* Z_res, double* W_res){   // 更新结果
+    
+  int pos = threadIdx.x+blockDim.x*blockIdx.x;// 线程pos计算HUVWZ[pos]位置的格子
+  // calculate_HUV
+//   calculate_HUV(
+//     t, pos,
+//     jt, NHQ, C0, C1, HM1, HM2, DT, QLUA, VMIN,
+//     MBQ_LEN, MBZQ_LEN, MBZ_LEN, MBW_LEN, MDI_LEN,
+//     NV, H_pre, U_pre, V_pre, Z_pre, MBQ, DQT, MBZQ, ZB1, ZBC, MBZ, DZT, TOPW, MBW, TOPD, MDI, AREA, FNC,
+//     KLAS, QT, SIDE, ZW, QW, ZT, NAC, COSF, SINF, SLCOS, SLSIN,
+//     H_res, U_res, V_res, Z_res, W_res);
+    // 数据读取测试
+    if(pos == CEL - 1){
+        printf("SIDE[0][idx] =  %f \n", SIDE[0][pos]);
+      }
+  }
+
+
 int main() {
-  using namespace DataManager;
   //1. 数据初始化
   READ_DATA("TIME", MDT, NDAYS)
   READ_DATA("GIRD", NOD, CEL)
@@ -707,6 +835,10 @@ int main() {
   int K0 = MDT / DT;
   int pos;
 
+  // 跟时间无关的数据迁移
+  initialize_deviceVar();
+
+  printf("grid: %d, block: %d\n", (CEL + block_size -1)/block_size, block_size);
   for (jt = 0; jt < 100; jt++) {
 
     for (int l = 0; l < NZ; l++) {
@@ -721,14 +853,46 @@ int main() {
       }
     }
 
+    // 跟时间 jt 相关的数据迁移
+    if(NQ != 0){
+      cudaMemcpy(DQT_dev, DQT.data(), sizeof(double)* NQ, cudaMemcpyHostToDevice);
+      cudaMemcpy(QT_dev, QT[jt].data(), sizeof(double) * NDAYS, cudaMemcpyHostToDevice);
+    }
+    if(NZ != 0){
+      cudaMemcpy(DZT_dev, DZT.data(), sizeof(double)* NZ, cudaMemcpyHostToDevice);
+      cudaMemcpy(ZT_dev, ZT[jt].data(), sizeof(double) * NDAYS, cudaMemcpyHostToDevice);
+    }
+
     // start_time = omp_get_wtime();
     clock_t start_time = clock();
     for (kt = 1; kt <= K0; kt++) {
 
-      // for (pos = 0; pos < CEL; pos++) {
-      //   time_step(kt, pos);
-      // }
-      // todo: 调用 kernel 函数
+        cudaMemcpy(H_dev, &H[TIME_PREV][0], sizeof(double) * CEL, cudaMemcpyHostToDevice);
+        cudaMemcpy(U_dev, &U[TIME_PREV][0], sizeof(double) * CEL, cudaMemcpyHostToDevice);
+        cudaMemcpy(V_dev, &V[TIME_PREV][0], sizeof(double) * CEL, cudaMemcpyHostToDevice);
+        cudaMemcpy(Z_dev, &Z[TIME_PREV][0], sizeof(double) * CEL, cudaMemcpyHostToDevice);
+        cudaMemcpy(W_dev, &W[TIME_PREV][0], sizeof(double) * CEL, cudaMemcpyHostToDevice);
+
+        // 2. kernel 调用
+        
+
+        translate_step<<<(CEL + block_size -1)/block_size, block_size>>>( 
+            // todo: 补充前两行参数
+            CEL, DT, jt, NHQ, HM1, HM2,
+            H_dev, U_dev, V_dev, Z_dev, W_dev,
+            NV_dev, AREA_dev, ZBC_dev, ZB1_dev, DQT_dev, DZT_dev, TOPW_dev, TOPD_dev, MBQ_dev, MBZQ_dev, MBW_dev, MDI_dev,
+            QT_dev, ZT_dev,
+            SIDE_devIdx, SLCOS_devIdx, SLSIN_devIdx, KLAS_devIdx, ZW_devIdx, QW_devIdx, NAC_devIdx,
+            H_res, U_res, V_res, Z_res, W_res
+        );
+        // // 3. 结果处理
+        cudaDeviceSynchronize(); // 等待所有的核函数执行完毕
+
+        cudaMemcpy(H[TIME_NOW].data(), H_res, sizeof(double) * CEL, cudaMemcpyDeviceToHost);
+        cudaMemcpy(U[TIME_NOW].data(), U_res, sizeof(double) * CEL, cudaMemcpyDeviceToHost);
+        cudaMemcpy(V[TIME_NOW].data(), V_res, sizeof(double) * CEL, cudaMemcpyDeviceToHost);
+        cudaMemcpy(Z[TIME_NOW].data(), Z_res, sizeof(double) * CEL, cudaMemcpyDeviceToHost);
+        cudaMemcpy(W[TIME_NOW].data(), W_res, sizeof(double) * CEL, cudaMemcpyDeviceToHost);
 
     }
     // end_time = omp_get_wtime();
@@ -741,35 +905,3 @@ int main() {
   }
   return 0;
 }
-
-
-__global__ void translate_step(int t, const int CEL, const int DT, const int jt, const int NHQ, const double HM1, const double HM2, const double QLUA, const double VMIN, const double C0, const double C1,
-  int MBQ_LEN, int MBZQ_LEN, int MBZ_LEN, int MBW_LEN, int MDI_LEN,//数组长度
-  double* H_pre, double* U_pre, double* V_pre, double* Z_pre, double* W_pre,
-  int* NV, double* AREA, double* ZBC, double* ZB1, double* DQT, double* DZT, double* TOPW, double* TOPD, double* MBQ, double* MBZQ, double* MBW, double* MDI, double* FNC, double* MBZ, 
-  double* d_QT, double* d_ZT,
-  double** SIDE, double** SLCOS, double** SLSIN, double** KLAS, double** NAC, double** ZW, double** QW, double** QT, double** ZT, double** COSF, double** SINF,
-  double* H_res, double* U_res, double* V_res, double* Z_res, double* W_res){
-    
-  int pos = threadIdx.x+blockDim.x*blockIdx.x;// 线程pos计算HUVWZ[pos]位置的格子
-  // calculate_HUV
-  calculate_HUV(
-    t, pos,
-    jt, NHQ, C0, C1, HM1, HM2, DT, QLUA, VMIN,
-    MBQ_LEN, MBZQ_LEN, MBZ_LEN, MBW_LEN, MDI_LEN,
-    NV, H_pre, U_pre, V_pre, Z_pre, MBQ, DQT, MBZQ, ZB1, ZBC, MBZ, DZT, TOPW, MBW, TOPD, MDI, AREA, FNC,
-    KLAS, QT, SIDE, ZW, QW, ZT, NAC, COSF, SINF, SLCOS, SLSIN,
-    H_res, U_res, V_res, Z_res, W_res);
-
-  // calculate_WHUV
-
-
-  // calculate_FLUX
-
-
-  // BOUNDA
-
-
-  // OSHER
-
-  }
