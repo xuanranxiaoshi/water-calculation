@@ -121,7 +121,7 @@ __device__ __forceinline__ void calculate_FLUX
 const int jt, const int NHQ, const double C0, const double C1, const double HM1, const double HM2, const double VMIN,
 int MBQ_LEN, int MBZQ_LEN, int MBZ_LEN, int MBW_LEN, int MDI_LEN,//数组长度
 double* H_pre, double* U_pre, double* V_pre, double* Z_pre, double* MBQ, double* DQT, double* MBZQ, double* ZB1, double* ZBC, double* MBZ, double* DZT, double* TOPW, double* MBW, double* TOPD, double* MDI,
-double** KLAS, double** QT, double** SIDE, double** ZW, double** QW, double** ZT, double** NAC, double** COSF, double** SINF) {
+double** KLAS, double** QT, double** SIDE, double** ZW, double** QW, double** ZT, int** NAC, double** COSF, double** SINF) {
   // Vec QL(3);
   // Vec QR(3);
   // QL[0] = H[TIME_PREV][pos];
@@ -224,7 +224,7 @@ __device__ __forceinline__ void calculate_WHUV
 const int jt, const int NHQ, const double C0, const double C1, const double HM1, const double HM2, const double VMIN,
 int MBQ_LEN, int MBZQ_LEN, int MBZ_LEN, int MBW_LEN, int MDI_LEN,//数组长度
 double* H_pre, double* U_pre, double* V_pre, double* Z_pre, double* MBQ, double* DQT, double* MBZQ, double* ZB1, double* ZBC, double* MBZ, double* DZT, double* TOPW, double* MBW, double* TOPD, double* MDI,
-double** KLAS, double** QT, double** SIDE, double** ZW, double** QW, double** ZT, double** NAC, double** COSF, double** SINF, double** SLCOS, double** SLSIN) {
+double** KLAS, double** QT, double** SIDE, double** ZW, double** QW, double** ZT, int** NAC, double** COSF, double** SINF, double** SLCOS, double** SLSIN) {
   // Vec2 FLUX(4, Vec(4));
   double FLUX[4][4];// 在kernel中不能使用vector
   calculate_FLUX(t, pos, FLUX,
@@ -250,7 +250,7 @@ __device__ __forceinline__ void calculate_HUV
 const int jt, const int NHQ, const double C0, const double C1, const double HM1, const double HM2, const int DT, const double QLUA, const double VMIN,
 int MBQ_LEN, int MBZQ_LEN, int MBZ_LEN, int MBW_LEN, int MDI_LEN,//数组长度
 int* NV, double* H_pre, double* U_pre, double* V_pre, double* Z_pre, double* MBQ, double* DQT, double* MBZQ, double* ZB1, double* ZBC, double* MBZ, double* DZT, double* TOPW, double* MBW, double* TOPD, double* MDI, double* AREA, double* FNC,
-double** KLAS, double** QT, double** SIDE, double** ZW, double** QW, double** ZT, double** NAC, double** COSF, double** SINF, double** SLCOS, double** SLSIN,
+double** KLAS, double** QT, double** SIDE, double** ZW, double** QW, double** ZT, int** NAC, double** COSF, double** SINF, double** SLCOS, double** SLSIN,
 double* H_res, double* U_res, double* V_res, double* Z_res, double* W_res) {
   double SIDEX, SIDES, HSIDE, DT2, DTA, WDTA, QX1, QY1, DTAU, DTAV, WSF;
   // double H1 = H[TIME_PREV][pos];
@@ -324,7 +324,7 @@ __device__ __forceinline__ void BOUNDA
 const int jt, const int NHQ, const double C0, const double C1,
 int MBQ_LEN, int MBZQ_LEN, int MBZ_LEN, int MBW_LEN, int MDI_LEN,//数组长度
 double* H_pre, double* Z_pre, double* MBQ, double* DQT, double* MBZQ, double* ZBC, double* MBZ, double* DZT, double* TOPW, double* MBW, double* TOPD, double* MDI,
-double** KLAS, double** QT, double** SIDE, double** ZW, double** QW, double** ZT, double** NAC, double** COSF, double** SINF) {
+double** KLAS, double** QT, double** SIDE, double** ZW, double** QW, double** ZT, int** NAC, double** COSF, double** SINF) {
   // Vec WZ(NHQ);
   // Vec WQ(NHQ);
   //=====================================================
@@ -423,7 +423,7 @@ double** KLAS, double** QT, double** SIDE, double** ZW, double** QW, double** ZT
     double NE = pos;
     if (NAC[j][pos] != 0) {
       // NE = std::fmin(pos, NAC[j][pos]);
-      NE = fmin((double)pos, NAC[j][pos]);
+      NE = min(pos, NAC[j][pos]);
     }
     int pos_near = find_in_vec(MBW, MBW_LEN, pos);
     double TOP = TOPW[pos_near];
@@ -810,17 +810,17 @@ __global__ void translate_step(
     
   int pos = threadIdx.x+blockDim.x*blockIdx.x;// 线程pos计算HUVWZ[pos]位置的格子
   // calculate_HUV
-//   calculate_HUV(
-//     t, pos,
-//     jt, NHQ, C0, C1, HM1, HM2, DT, QLUA, VMIN,
-//     MBQ_LEN, MBZQ_LEN, MBZ_LEN, MBW_LEN, MDI_LEN,
-//     NV, H_pre, U_pre, V_pre, Z_pre, MBQ, DQT, MBZQ, ZB1, ZBC, MBZ, DZT, TOPW, MBW, TOPD, MDI, AREA, FNC,
-//     KLAS, QT, SIDE, ZW, QW, ZT, NAC, COSF, SINF, SLCOS, SLSIN,
-//     H_res, U_res, V_res, Z_res, W_res);
+  calculate_HUV(
+    t, pos,
+    jt, NHQ, C0, C1, HM1, HM2, DT, QLUA, VMIN,
+    MBQ_LEN, MBZQ_LEN, MBZ_LEN, MBW_LEN, MDI_LEN,
+    NV, H_pre, U_pre, V_pre, Z_pre, MBQ, DQT, MBZQ, ZB1, ZBC, MBZ, DZT, TOPW, MBW, TOPD, MDI, AREA, FNC,
+    KLAS, QT, SIDE, ZW, QW, ZT, NAC, COSF, SINF, SLCOS, SLSIN,
+    H_res, U_res, V_res, Z_res, W_res);
     // 数据读取测试
-    if(pos == CEL - 1){
-        printf("SIDE[0][idx] =  %f \n", SIDE[0][pos]);
-      }
+    // if(pos == CEL - 1){
+    //     printf("SIDE[0][idx] =  %f \n", SIDE[0][pos]);
+    //   }
   }
 
 
